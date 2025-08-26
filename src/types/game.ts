@@ -11,14 +11,14 @@ export interface Track {
   name: string
   artist: string
   preview_url: string | null
-  added_by: string // Spotify user ID who added the track
-  added_by_name: string // Display name of the user who added the track
+  user_id: string // Spotify user ID who has this as top track
+  user_name: string // Display name of the user who has this as top track
 }
 
 export interface GameSettings {
   numberOfRounds: number
   roundDuration: number // in seconds
-  playlistUrl: string
+  tracksPerUser: number // how many tracks to take from each user's top tracks
 }
 
 export interface Lobby {
@@ -36,7 +36,7 @@ export interface Lobby {
 export interface GameRound {
   roundNumber: number
   track: Track
-  correctAnswer: string
+  correctAnswer: string // user_id of the track owner
   playerGuesses: Record<string, string> // userId -> guessed userId
   startTime: Date
   endTime?: Date

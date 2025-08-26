@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
     }
 
     switch (action) {
-      case 'load-playlist':
-        // Get session with access token
+      case 'start':
+        // Get session with access token for the owner
         const sessionWithToken = await getServerSession(authOptions) as any
         
         if (!sessionWithToken?.accessToken) {
@@ -42,55 +42,54 @@ export async function POST(request: NextRequest) {
           }, { status: 401 })
         }
 
-        console.log('Loading playlist:', lobby.settings.playlistUrl)
-        console.log('Access token exists:', !!sessionWithToken.accessToken)
-        
-        const spotifyService = new SpotifyService(sessionWithToken.accessToken)
+        console.log('🎮 Starting game - collecting top tracks from all players')
         
         try {
-          // First check if it's a Blend playlist
-          const isBlend = await spotifyService.isBlendPlaylist(lobby.settings.playlistUrl)
-          console.log('Is Blend playlist:', isBlend)
+          // Collect user tokens - for now we only have owner's token
+          // In a real implementation, you'd need to collect tokens from all players
+          const userTokens = [{
+            userId: session.user.email!,
+            userName: session.user.name!,
+            accessToken: sessionWithToken.accessToken
+          }]
           
-          const tracks = await spotifyService.getPlaylistTracks(lobby.settings.playlistUrl)
+          // TODO: Add logic to collect access tokens from all players
+          // For now, we'll use owner's tracks for demonstration
+          
+          const spotifyService = new SpotifyService(sessionWithToken.accessToken)
+          const tracks = await spotifyService.createGameTracksPool(userTokens, lobby.settings.tracksPerUser)
           
           if (tracks.length === 0) {
             return NextResponse.json({ 
-              error: 'No playable tracks found in playlist. Make sure the playlist has tracks with preview URLs and you have access to it.' 
+              error: 'No playable top tracks found. Make sure players have recent listening history.' 
             }, { status: 400 })
           }
 
-          console.log('Successfully loaded', tracks.length, 'tracks')
+          console.log(`✅ Successfully collected ${tracks.length} tracks from ${userTokens.length} players`)
+          
+          // Update lobby with tracks
           gameStore.updateLobby(lobbyId, { tracks })
 
+          // Initialize player scores
+          const playerIds = lobby.players.map(p => p.id)
+          const playerNames = lobby.players.map(p => p.name)
+          gameStore.initializeScores(lobbyId, playerIds, playerNames)
+
+          gameStore.updateLobby(lobbyId, { 
+            status: 'playing',
+            currentRound: 1 
+          })
+
           return NextResponse.json({ 
-            message: 'Playlist loaded successfully',
-            trackCount: tracks.length,
-            isBlend: isBlend
+            message: 'Game started with top tracks',
+            trackCount: tracks.length 
           })
         } catch (error: any) {
-          console.error('Spotify API Error:', error)
+          console.error('Error collecting top tracks:', error)
           return NextResponse.json({ 
-            error: `Failed to load playlist: ${error.message}. Make sure you have access to this playlist and it's a public or collaborative playlist.` 
+            error: `Failed to start game: ${error.message}` 
           }, { status: 400 })
         }
-
-      case 'start':
-        if (lobby.tracks.length === 0) {
-          return NextResponse.json({ error: 'Please load a playlist first' }, { status: 400 })
-        }
-
-        // Initialize player scores
-        const playerIds = lobby.players.map(p => p.id)
-        const playerNames = lobby.players.map(p => p.name)
-        gameStore.initializeScores(lobbyId, playerIds, playerNames)
-
-        gameStore.updateLobby(lobbyId, { 
-          status: 'playing',
-          currentRound: 1 
-        })
-
-        return NextResponse.json({ message: 'Game started' })
 
       case 'next-round':
         const updatedLobby = gameStore.getLobby(lobbyId)
@@ -124,14 +123,14 @@ export async function POST(request: NextRequest) {
         }
 
         // Calculate score
-        const points = gameStore.calculateRoundScore(lobbyId, session.user.email!, guessedUserId, currentTrack.added_by)
+        const points = gameStore.calculateRoundScore(lobbyId, session.user.email!, guessedUserId, currentTrack.user_id)
         gameStore.updatePlayerScore(lobbyId, session.user.email!, points)
 
         // Create game round record
         const gameRound: GameRound = {
           roundNumber,
           track: currentTrack,
-          correctAnswer: currentTrack.added_by,
+          correctAnswer: currentTrack.user_id,
           playerGuesses: { [session.user.email!]: guessedUserId },
           startTime: new Date(),
           endTime: new Date(),
@@ -141,7 +140,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ 
           message: 'Guess submitted',
           correct: points > 0,
-          correctAnswer: currentTrack.added_by_name
+          correctAnswer: currentTrack.user_name
         })
 
       default:
@@ -180,8 +179,8 @@ export async function GET(request: NextRequest) {
           return NextResponse.json({ error: 'No track available' }, { status: 400 })
         }
 
-        // Get playlist contributors for guessing options
-        const contributors = gameStore.getPlaylistContributors(lobbyId)
+        // Get playlist contributors for guessing options (now track owners)
+        const contributors = gameStore.getTrackOwners(lobbyId)
 
         return NextResponse.json({
           track: {
@@ -190,7 +189,7 @@ export async function GET(request: NextRequest) {
             preview_url: currentTrack.preview_url,
           },
           options: contributors,
-          correctAnswer: currentTrack.added_by,
+          correctAnswer: currentTrack.user_id,
           roundNumber: lobby.currentRound,
           totalRounds: lobby.settings.numberOfRounds,
         })

@@ -75,28 +75,9 @@ export function useGameState(lobbyId: string) {
     }
   }
 
-  const loadPlaylist = async () => {
-    try {
-      const response = await fetch('/api/game', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lobbyId, action: 'load-playlist' }),
-      })
-
-      const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to load playlist')
-      }
-
-      return data
-    } catch (error: any) {
-      console.error('Load playlist error:', error)
-      throw error
-    }
-  }
-
   const startGame = async () => {
     try {
+      console.log('🎮 Starting game and collecting top tracks...')
       const response = await fetch('/api/game', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,8 +89,11 @@ export function useGameState(lobbyId: string) {
         throw new Error(data.error)
       }
 
+      console.log('✅ Game started successfully')
       fetchLobby()
+      return data
     } catch (error) {
+      console.error('Start game error:', error)
       throw error
     }
   }
@@ -202,7 +186,6 @@ export function useGameState(lobbyId: string) {
     setTimeLeft,
     scores,
     joinLobby,
-    loadPlaylist,
     startGame,
     loadCurrentTrack,
     submitGuess,

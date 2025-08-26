@@ -11,15 +11,10 @@ export default function Home() {
   const [gameSettings, setGameSettings] = useState({
     numberOfRounds: 10,
     roundDuration: 30,
-    playlistUrl: ''
+    tracksPerUser: 8
   })
 
   const handleCreateLobby = async () => {
-    if (!gameSettings.playlistUrl.trim()) {
-      alert('Please enter a Spotify playlist URL')
-      return
-    }
-
     setIsCreatingLobby(true)
 
     try {
@@ -93,26 +88,35 @@ export default function Home() {
             </h2>
 
             <div className="space-y-6">
-              {/* Playlist URL */}
+              {/* Game Info */}
+              <div className="bg-gradient-to-r from-green-600 to-blue-600 rounded-lg p-6">
+                <h3 className="text-xl font-bold text-white mb-2">🎵 Top Tracks Battle!</h3>
+                <p className="text-white opacity-90">
+                  Play music from everyone's top tracks and guess whose favorite song it is!
+                </p>
+              </div>
+
+              {/* Tracks per User */}
               <div>
                 <label className="block text-gray-300 font-semibold mb-2">
-                  Spotify Blend Playlist URL *
+                  Tracks per Player
                 </label>
-                <input
-                  type="text"
-                  value={gameSettings.playlistUrl}
+                <select
+                  value={gameSettings.tracksPerUser}
                   onChange={(e) => setGameSettings({
                     ...gameSettings,
-                    playlistUrl: e.target.value
+                    tracksPerUser: parseInt(e.target.value)
                   })}
-                  placeholder="https://open.spotify.com/playlist/..."
                   className="w-full px-4 py-3 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-green-500 focus:outline-none"
-                />
-                <div className="text-gray-400 text-sm mt-1 space-y-1">
-                  <p>Get the share link from your Spotify Blend playlist</p>
-                  <p className="text-yellow-400">⚠️ Make sure you have access to this playlist and it's a Blend/collaborative playlist</p>
-                  <p className="text-blue-400">💡 If you get "Failed to load playlist", try signing out and back in to refresh your Spotify access</p>
-                </div>
+                >
+                  <option value={5}>5 tracks per player</option>
+                  <option value={8}>8 tracks per player</option>
+                  <option value={10}>10 tracks per player</option>
+                  <option value={15}>15 tracks per player</option>
+                </select>
+                <p className="text-gray-400 text-sm mt-1">
+                  How many top tracks to include from each player's Spotify
+                </p>
               </div>
 
               {/* Number of Rounds */}
@@ -158,7 +162,7 @@ export default function Home() {
               {/* Create Lobby Button */}
               <button
                 onClick={handleCreateLobby}
-                disabled={isCreatingLobby || !gameSettings.playlistUrl.trim()}
+                disabled={isCreatingLobby}
                 className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-4 px-6 rounded-lg transition-colors duration-200"
               >
                 {isCreatingLobby ? 'Creating Lobby...' : 'Create Game Lobby'}
@@ -169,14 +173,18 @@ export default function Home() {
           {/* Instructions */}
           <div className="mt-8 bg-gray-800 rounded-lg p-6">
             <h3 className="text-xl font-semibold text-white mb-4">How to Play:</h3>
-            <ol className="text-gray-300 space-y-2">
-              <li>1. Create a lobby with your Spotify Blend playlist</li>
-              <li>2. Share the lobby link with your friends</li>
-              <li>3. Wait for everyone to join</li>
-              <li>4. Start the game and listen to track previews</li>
-              <li>5. Guess which friend added each track to the playlist</li>
-              <li>6. Earn points for correct guesses!</li>
+            <ol className="list-decimal list-inside space-y-2 text-gray-300">
+              <li>Create a lobby and invite friends (everyone needs Spotify)</li>
+              <li>When game starts, we'll gather everyone's top tracks from last 4 weeks</li>
+              <li>Listen to song previews and guess whose favorite song it is</li>
+              <li>Score points for correct guesses - highest score wins!</li>
             </ol>
+            <div className="mt-4 bg-blue-900 rounded-lg p-4">
+              <p className="text-blue-200 text-sm">
+                <strong>🎯 New Game Mode:</strong> Instead of playlists, we use your real Spotify listening data! 
+                The game will automatically collect top tracks from each player's recent listening history.
+              </p>
+            </div>
           </div>
         </div>
       </div>

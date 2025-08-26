@@ -89,16 +89,16 @@ class GameStore {
     return lobby.tracks[trackIndex]
   }
 
-  getPlaylistContributors(lobbyId: string): Array<{ id: string; name: string }> {
+  getTrackOwners(lobbyId: string): Array<{ id: string; name: string }> {
     const lobby = this.getLobby(lobbyId)
     if (!lobby || lobby.tracks.length === 0) return []
 
-    const contributors = new Map<string, string>()
+    const owners = new Map<string, string>()
     lobby.tracks.forEach(track => {
-      contributors.set(track.added_by, track.added_by_name)
+      owners.set(track.user_id, track.user_name)
     })
 
-    return Array.from(contributors.entries()).map(([id, name]) => ({ id, name }))
+    return Array.from(owners.entries()).map(([id, name]) => ({ id, name }))
   }
 
   calculateRoundScore(lobbyId: string, userId: string, guessedUserId: string, correctUserId: string): number {

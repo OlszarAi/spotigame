@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     const { settings }: { settings: GameSettings } = await request.json()
 
     // Validate settings
-    if (!settings.playlistUrl || !settings.numberOfRounds || !settings.roundDuration) {
+    if (!settings.numberOfRounds || !settings.roundDuration || !settings.tracksPerUser) {
       return NextResponse.json({ error: 'Invalid settings' }, { status: 400 })
     }
 

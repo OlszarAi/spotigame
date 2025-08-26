@@ -16,13 +16,13 @@ export async function POST(request: NextRequest) {
       error: session?.error
     });
 
-    const { playlistUrl } = await request.json()
-    console.log('🎵 Testing playlist URL:', playlistUrl);
+    const { action } = await request.json()
+    console.log('🎵 Testing action:', action);
 
     if (!session?.user) {
       return NextResponse.json({
         session: null,
-        playlistUrl,
+        action,
         timestamp: new Date().toISOString(),
         error: 'No session found - user not authenticated'
       })
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
         error: session.error,
         expires: session.expires
       },
-      playlistUrl,
+      action,
       timestamp: new Date().toISOString()
     }
 
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      console.log('🔑 Access token available, testing playlist access...');
+      console.log('🔑 Access token available, testing top tracks access...');
       const spotifyService = new SpotifyService(session.accessToken)
       
       // Test user profile access
@@ -60,25 +60,14 @@ export async function POST(request: NextRequest) {
         email: userProfile.email
       }
 
-      // Test playlist access
-      const playlist = await spotifyService.getPlaylistFromUrl(playlistUrl)
-      debugInfo.playlist = {
-        id: playlist.id,
-        name: playlist.name,
-        public: playlist.public,
-        collaborative: playlist.collaborative,
-        owner: playlist.owner,
-        tracks_total: playlist.tracks.total
-      }
-
-      // Test getting tracks
-      const tracks = await spotifyService.getPlaylistTracks(playlistUrl)
-      debugInfo.tracks = {
-        count: tracks.length,
-        samples: tracks.slice(0, 3).map(t => ({
+      // Test top tracks access
+      const topTracks = await spotifyService.getTopTracks(session.user.email!, 10)
+      debugInfo.topTracks = {
+        count: topTracks.length,
+        samples: topTracks.slice(0, 3).map(t => ({
           name: t.name,
           artist: t.artist,
-          added_by: t.added_by_name,
+          user_name: t.user_name,
           has_preview: !!t.preview_url
         }))
       }

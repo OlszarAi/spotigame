@@ -25,7 +25,6 @@ export default function GamePage({ params }: GamePageProps) {
     setTimeLeft,
     scores,
     joinLobby,
-    loadPlaylist,
     startGame,
     submitGuess,
     nextRound,
@@ -98,17 +97,9 @@ export default function GamePage({ params }: GamePageProps) {
     }
   }
 
-  const handleLoadPlaylist = async () => {
-    try {
-      const result = await loadPlaylist()
-      alert(`Playlist loaded successfully! ${result.trackCount} tracks found.`)
-    } catch (error: any) {
-      alert(error.message || 'Failed to load playlist')
-    }
-  }
-
   const handleStartGame = async () => {
     try {
+      console.log('🎮 Starting game and collecting top tracks...')
       await startGame()
     } catch (error: any) {
       alert(error.message || 'Failed to start game')
@@ -200,33 +191,28 @@ export default function GamePage({ params }: GamePageProps) {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-gray-300">
                   <div>Rounds: {lobby.settings.numberOfRounds}</div>
                   <div>Round Duration: {lobby.settings.roundDuration}s</div>
-                  <div>Playlist: {lobby.settings.playlistUrl ? 'Set' : 'Not set'}</div>
+                  <div>Tracks per Player: {lobby.settings.tracksPerUser}</div>
                 </div>
+              </div>
+
+              {/* Game Info */}
+              <div className="mb-6 bg-gradient-to-r from-green-600 to-blue-600 rounded-lg p-4">
+                <h4 className="text-white font-bold mb-2">🎵 How This Works</h4>
+                <p className="text-white text-sm opacity-90">
+                  When the game starts, we'll collect top tracks from the last 4 weeks from each player's Spotify. 
+                  Then you'll guess whose favorite song is playing!
+                </p>
               </div>
 
               {/* Owner Controls */}
               {isOwner && (
                 <div className="space-y-4">
-                  {lobby.tracks.length === 0 ? (
-                    <button
-                      onClick={handleLoadPlaylist}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
-                    >
-                      Load Playlist
-                    </button>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="text-green-400">
-                        ✓ Playlist loaded ({lobby.tracks.length} tracks)
-                      </div>
-                      <button
-                        onClick={handleStartGame}
-                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
-                      >
-                        Start Game
-                      </button>
-                    </div>
-                  )}
+                  <button
+                    onClick={handleStartGame}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                  >
+                    🚀 Start Game & Collect Top Tracks
+                  </button>
                 </div>
               )}
             </div>
@@ -359,10 +345,10 @@ export default function GamePage({ params }: GamePageProps) {
             <div className="bg-gray-900 p-8 rounded-lg max-w-md w-full mx-4">
               <div className="text-center">
                 <h3 className="text-2xl font-bold text-white mb-4">
-                  {selectedGuess === currentTrack?.added_by ? '🎉 Correct!' : '❌ Wrong!'}
+                  {selectedGuess === currentTrack?.user_id ? '🎉 Correct!' : '❌ Wrong!'}
                 </h3>
                 <p className="text-gray-300 mb-4">
-                  The correct answer was: <strong>{currentTrack?.added_by_name}</strong>
+                  This was <strong>{currentTrack?.user_name}'s</strong> top track!
                 </p>
                 <div className="text-sm text-gray-400">
                   Next round starting in 3 seconds...

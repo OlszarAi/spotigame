@@ -12,51 +12,48 @@ export class SpotifyService {
     this.spotifyApi.setAccessToken(accessToken)
   }
 
-  async getPlaylistFromUrl(playlistUrl: string): Promise<any> {
-    // Extract playlist ID from Spotify URL
-    const playlistId = this.extractPlaylistId(playlistUrl)
-    if (!playlistId) {
-      throw new Error('Invalid Spotify playlist URL')
-    }
-
+  async getTopTracks(userId: string, limit: number = 50): Promise<Track[]> {
     try {
-      console.log('Fetching playlist with ID:', playlistId)
-      const playlist = await this.spotifyApi.getPlaylist(playlistId)
-      console.log('Playlist fetched successfully:', playlist.body.name)
-      return playlist.body
+      console.log(`🎵 Fetching top tracks for user: ${userId}`)
+      
+      const response = await this.spotifyApi.getMyTopTracks({
+        time_range: 'short_term', // last 4 weeks
+        limit: limit
+      })
+      
+      const tracks: Track[] = []
+      
+      for (const track of response.body.items) {
+        if (track.preview_url) {
+          tracks.push({
+            id: track.id,
+            name: track.name,
+            artist: track.artists[0]?.name || 'Unknown Artist',
+            preview_url: track.preview_url,
+            user_id: userId,
+            user_name: '', // Will be filled later with user data
+          })
+        }
+      }
+
+      console.log(`✅ Found ${tracks.length} top tracks with preview URLs for user ${userId}`)
+      
+      if (tracks.length === 0) {
+        throw new Error('No playable top tracks found with preview URLs')
+      }
+
+      return tracks
     } catch (error: any) {
-      console.error('Error fetching playlist:', error)
+      console.error('❌ Error fetching top tracks:', error)
       
       if (error.statusCode === 401) {
         throw new Error('Spotify authentication expired. Please sign out and sign in again.')
       } else if (error.statusCode === 403) {
-        throw new Error('Access forbidden. Make sure the playlist is public or you have access to it.')
-      } else if (error.statusCode === 404) {
-        throw new Error('Playlist not found. Check the URL and make sure the playlist exists.')
+        throw new Error('Access forbidden. Make sure you have granted permission to read your top tracks.')
       } else {
         throw new Error(`Spotify API error: ${error.message || 'Unknown error'}`)
       }
     }
-  }
-
-  async getPlaylistTracks(playlistUrl: string): Promise<Track[]> {
-    const playlist = await this.getPlaylistFromUrl(playlistUrl)
-    const tracks: Track[] = []
-
-    for (const item of playlist.tracks.items) {
-      if (item.track && item.track.preview_url) {
-        tracks.push({
-          id: item.track.id,
-          name: item.track.name,
-          artist: item.track.artists[0]?.name || 'Unknown Artist',
-          preview_url: item.track.preview_url,
-          added_by: item.added_by.id,
-          added_by_name: item.added_by.display_name || item.added_by.id,
-        })
-      }
-    }
-
-    return tracks
   }
 
   async getUserProfile(): Promise<any> {
@@ -69,34 +66,42 @@ export class SpotifyService {
     }
   }
 
-  private extractPlaylistId(url: string): string | null {
-    // Handle different Spotify URL formats
-    const patterns = [
-      /spotify:playlist:([a-zA-Z0-9]+)/,
-      /open\.spotify\.com\/playlist\/([a-zA-Z0-9]+)/,
-    ]
-
-    for (const pattern of patterns) {
-      const match = url.match(pattern)
-      if (match) {
-        return match[1]
+  // Helper method to create game tracks pool from multiple users' top tracks
+  async createGameTracksPool(userTokens: Array<{userId: string, userName: string, accessToken: string}>, tracksPerUser: number = 10): Promise<Track[]> {
+    const allTracks: Track[] = []
+    
+    for (const user of userTokens) {
+      try {
+        // Create new service instance for each user
+        const userSpotifyService = new SpotifyService(user.accessToken)
+        const userTopTracks = await userSpotifyService.getTopTracks(user.userId, 50)
+        
+        // Add user name to tracks
+        const tracksWithUserInfo = userTopTracks.map(track => ({
+          ...track,
+          user_name: user.userName
+        }))
+        
+        // Randomly select tracks for this user
+        const shuffled = tracksWithUserInfo.sort(() => 0.5 - Math.random())
+        const selectedTracks = shuffled.slice(0, Math.min(tracksPerUser, shuffled.length))
+        
+        allTracks.push(...selectedTracks)
+        console.log(`✅ Added ${selectedTracks.length} tracks from ${user.userName}`)
+      } catch (error) {
+        console.error(`❌ Failed to get tracks for user ${user.userName}:`, error)
+        // Continue with other users even if one fails
       }
     }
-
-    return null
-  }
-
-  // Check if a playlist is a Blend playlist
-  async isBlendPlaylist(playlistUrl: string): Promise<boolean> {
-    try {
-      const playlist = await this.getPlaylistFromUrl(playlistUrl)
-      // Blend playlists typically have multiple contributors
-      // and specific naming patterns
-      return playlist.collaborative || 
-             playlist.name.toLowerCase().includes('blend') ||
-             playlist.description?.toLowerCase().includes('blend')
-    } catch (error) {
-      return false
+    
+    if (allTracks.length === 0) {
+      throw new Error('No tracks could be gathered from any user')
     }
+    
+    // Shuffle the final pool
+    const shuffledPool = allTracks.sort(() => 0.5 - Math.random())
+    console.log(`🎮 Created game pool with ${shuffledPool.length} tracks from ${userTokens.length} users`)
+    
+    return shuffledPool
   }
 }

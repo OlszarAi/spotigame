@@ -7,16 +7,16 @@ export default function DebugPage() {
   const { data: session, status } = useSession()
   const [debugResults, setDebugResults] = useState<any>(null)
   const [envCheck, setEnvCheck] = useState<any>(null)
-  const [testUrl, setTestUrl] = useState('https://open.spotify.com/playlist/37i9dQZF1EJLUcPEkMfEVd')
+  const [testUrl, setTestUrl] = useState('') // Remove default URL
   const [loading, setLoading] = useState(false)
 
-  const testPlaylistAccess = async () => {
+  const testTopTracksAccess = async () => {
     setLoading(true)
     try {
       const response = await fetch('/api/debug/spotify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playlistUrl: testUrl })
+        body: JSON.stringify({ action: 'test-top-tracks' })
       })
       const data = await response.json()
       setDebugResults(data)
@@ -77,24 +77,18 @@ export default function DebugPage() {
           </div>
         </div>
 
-        {/* Test Playlist Access */}
+        {/* Test Top Tracks Access */}
         <div className="bg-gray-900 p-6 rounded-lg">
-          <h2 className="text-xl font-semibold mb-4">Test Playlist Access</h2>
-          <div className="mb-4">
-            <input
-              type="text"
-              value={testUrl}
-              onChange={(e) => setTestUrl(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-800 text-white rounded border border-gray-700"
-              placeholder="Spotify playlist URL"
-            />
-          </div>
+          <h2 className="text-xl font-semibold mb-4">Test Top Tracks Access</h2>
+          <p className="text-gray-400 mb-4">
+            Tests if we can access your top tracks from the last 4 weeks
+          </p>
           <button
-            onClick={testPlaylistAccess}
+            onClick={testTopTracksAccess}
             disabled={loading}
             className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
           >
-            {loading ? 'Testing...' : 'Test Playlist Access'}
+            {loading ? 'Testing...' : 'Test Top Tracks Access'}
           </button>
         </div>
 
