@@ -37,8 +37,11 @@ function LoginContent() {
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1db954] mx-auto mb-4"></div>
+          <div className="text-white text-xl">Loading...</div>
+        </div>
       </div>
     )
   }
@@ -48,31 +51,31 @@ function LoginContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#121212] flex items-center justify-center p-4">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <h1 className="text-6xl font-bold text-white mb-4">
             🎵 SpotiGame
           </h1>
-          <p className="text-green-400 text-xl mb-8">
+          <p className="text-[#1db954] text-xl font-medium mb-8">
             The ultimate Spotify music guessing game
           </p>
-          <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-lg p-8 space-y-6">
+          <div className="bg-[#181818] border border-[#404040] rounded-lg p-8 space-y-6">
             <h2 className="text-2xl font-semibold text-white">
               Ready to Play?
             </h2>
-            <p className="text-gray-300 text-sm">
+            <p className="text-[#b3b3b3] text-sm">
               Connect your Spotify account to start playing with your music taste
             </p>
             
             <div className="space-y-4">
               {error && (
-                <div className="bg-red-500 bg-opacity-20 border border-red-500 rounded-lg p-4 text-red-200">
+                <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 text-red-300">
                   <p className="text-sm">{error}</p>
                 </div>
               )}
               
-              <div className="text-left text-sm text-gray-300 space-y-2">
+              <div className="text-left text-sm text-[#b3b3b3] space-y-2">
                 <h3 className="text-white font-medium">How it works:</h3>
                 <ul className="space-y-1 ml-4">
                   <li>• Create or join a game lobby</li>
@@ -84,13 +87,13 @@ function LoginContent() {
               
               <button
                 onClick={() => signIn('spotify', { callbackUrl: '/' })}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg transition duration-200 flex items-center justify-center space-x-2"
+                className="w-full bg-[#1db954] hover:bg-[#1ed760] text-black font-bold py-4 px-6 rounded-full transition-colors flex items-center justify-center space-x-2"
               >
                 <span className="text-2xl">🎧</span>
                 <span>Connect with Spotify</span>
               </button>
               
-              <p className="text-xs text-gray-400 text-center">
+              <p className="text-xs text-[#757575] text-center">
                 We only access your top tracks and basic profile info
               </p>
             </div>
@@ -104,8 +107,11 @@ function LoginContent() {
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1db954] mx-auto mb-4"></div>
+          <div className="text-white text-xl">Loading...</div>
+        </div>
       </div>
     }>
       <LoginContent />

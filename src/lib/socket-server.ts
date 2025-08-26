@@ -24,7 +24,7 @@ export class GameSocketServer {
     this.io.on('connection', (socket) => {
       console.log('User connected:', socket.id)
 
-      socket.on('join-lobby', async ({ lobbyId, userId }) => {
+      socket.on('join-lobby', async ({ lobbyId, userId, userName, userImage }) => {
         try {
           // Store user connection
           this.connectedUsers.set(socket.id, userId)
@@ -33,13 +33,24 @@ export class GameSocketServer {
           // Join socket room
           socket.join(lobbyId)
 
-          // Get updated lobby
-          const lobby = lobbyManager.getLobby(lobbyId)
+          // Add player to lobby if they're not already there
+          let lobby = lobbyManager.getLobby(lobbyId)
           if (lobby) {
+            // Check if player is already in the lobby
+            const existingPlayer = lobby.players.find(p => p.id === userId)
+            if (!existingPlayer) {
+              // Add the player to the lobby
+              const updatedLobby = lobbyManager.joinLobby(lobbyId, userId, userName || 'Unknown Player', userImage)
+              lobby = updatedLobby || lobby
+            }
+            
             // Emit to all users in the lobby
             this.io.to(lobbyId).emit('lobby-updated', lobby)
+          } else {
+            socket.emit('error', { message: 'Lobby not found' })
           }
         } catch (error) {
+          console.error('Error joining lobby:', error)
           socket.emit('error', { message: 'Failed to join lobby' })
         }
       })

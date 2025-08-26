@@ -46,7 +46,9 @@ export default function LobbyPage({ params }: Props) {
     // Join the lobby
     newSocket.emit('join-lobby', {
       lobbyId: lobbyId,
-      userId: session.user.spotifyId
+      userId: session.user.spotifyId,
+      userName: session.user.name,
+      userImage: session.user.image
     })
 
     // Listen for lobby updates
@@ -146,20 +148,23 @@ export default function LobbyPage({ params }: Props) {
 
   if (status === 'loading' || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white text-xl">Loading lobby...</div>
+      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1db954] mx-auto mb-4"></div>
+          <div className="text-white text-xl">Loading lobby...</div>
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
+      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
+        <div className="text-center bg-[#181818] p-8 rounded-lg border border-[#404040]">
           <div className="text-red-400 text-xl mb-4">{error}</div>
           <button
             onClick={() => router.push('/')}
-            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+            className="bg-[#1db954] hover:bg-[#1ed760] text-black font-bold py-2 px-6 rounded-full transition-colors"
           >
             Back to Home
           </button>
@@ -170,8 +175,16 @@ export default function LobbyPage({ params }: Props) {
 
   if (!lobby) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white text-xl">Lobby not found</div>
+      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
+        <div className="text-center bg-[#181818] p-8 rounded-lg border border-[#404040]">
+          <div className="text-white text-xl mb-4">Lobby not found</div>
+          <button
+            onClick={() => router.push('/')}
+            className="bg-[#1db954] hover:bg-[#1ed760] text-black font-bold py-2 px-6 rounded-full transition-colors"
+          >
+            Back to Home
+          </button>
+        </div>
       </div>
     )
   }
@@ -182,19 +195,19 @@ export default function LobbyPage({ params }: Props) {
   }
 
   return (
-    <div className="min-h-screen p-4">
+    <div className="min-h-screen bg-[#121212] text-white p-4">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-bold text-white mb-2">
             🎵 Game Lobby
           </h1>
-          <p className="text-green-400 text-lg">
+          <p className="text-[#1db954] text-lg font-medium">
             Lobby ID: {lobby.id}
           </p>
           <button
             onClick={copyLobbyLink}
-            className="mt-2 text-blue-400 hover:text-blue-300 underline text-sm"
+            className="mt-2 text-[#1db954] hover:text-[#1ed760] underline text-sm transition-colors"
           >
             Copy lobby link
           </button>
@@ -202,37 +215,37 @@ export default function LobbyPage({ params }: Props) {
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Settings Panel */}
-          <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-lg p-6">
+          <div className="bg-[#181818] rounded-lg p-6 border border-[#404040]">
             <h2 className="text-xl font-semibold text-white mb-4">Game Settings</h2>
             
             {isCreator && lobby.status === 'waiting' ? (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-green-400 mb-1">
+                  <label className="block text-sm font-medium text-[#b3b3b3] mb-2">
                     Number of Rounds
                   </label>
                   <select
                     value={lobby.settings.numberOfRounds}
                     onChange={(e) => updateSettings({ ...lobby.settings, numberOfRounds: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 bg-black bg-opacity-50 border border-green-500 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-400"
+                    className="w-full px-3 py-2 bg-[#121212] border border-[#404040] rounded-md text-white focus:outline-none focus:border-[#1db954] focus:ring-1 focus:ring-[#1db954] transition-colors"
                   >
                     {[5, 10, 15, 20].map(num => (
-                      <option key={num} value={num}>{num} rounds</option>
+                      <option key={num} value={num} className="bg-[#121212]">{num} rounds</option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-green-400 mb-1">
+                  <label className="block text-sm font-medium text-[#b3b3b3] mb-2">
                     Song Duration (seconds)
                   </label>
                   <select
                     value={lobby.settings.listeningDuration}
                     onChange={(e) => updateSettings({ ...lobby.settings, listeningDuration: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 bg-black bg-opacity-50 border border-green-500 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-400"
+                    className="w-full px-3 py-2 bg-[#121212] border border-[#404040] rounded-md text-white focus:outline-none focus:border-[#1db954] focus:ring-1 focus:ring-[#1db954] transition-colors"
                   >
                     {[15, 30, 45, 60].map(num => (
-                      <option key={num} value={num}>{num} seconds</option>
+                      <option key={num} value={num} className="bg-[#121212]">{num} seconds</option>
                     ))}
                   </select>
                 </div>
@@ -243,24 +256,33 @@ export default function LobbyPage({ params }: Props) {
                     id="showTrackInfo"
                     checked={lobby.settings.showTrackInfo}
                     onChange={(e) => updateSettings({ ...lobby.settings, showTrackInfo: e.target.checked })}
-                    className="mr-2 accent-green-500"
+                    className="mr-3 w-4 h-4 accent-[#1db954] bg-[#121212] border-[#404040] rounded focus:ring-[#1db954]"
                   />
-                  <label htmlFor="showTrackInfo" className="text-sm text-green-400">
+                  <label htmlFor="showTrackInfo" className="text-sm text-[#b3b3b3]">
                     Show track title and artist during game
                   </label>
                 </div>
               </div>
             ) : (
-              <div className="space-y-2 text-gray-300">
-                <p>Rounds: {lobby.settings.numberOfRounds}</p>
-                <p>Song Duration: {lobby.settings.listeningDuration} seconds</p>
-                <p>Show Track Info: {lobby.settings.showTrackInfo ? 'Yes' : 'No'}</p>
+              <div className="space-y-3 text-[#b3b3b3]">
+                <div className="flex justify-between">
+                  <span>Rounds:</span>
+                  <span className="text-white">{lobby.settings.numberOfRounds}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Song Duration:</span>
+                  <span className="text-white">{lobby.settings.listeningDuration} seconds</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Show Track Info:</span>
+                  <span className="text-white">{lobby.settings.showTrackInfo ? 'Yes' : 'No'}</span>
+                </div>
               </div>
             )}
           </div>
 
           {/* Players Panel */}
-          <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-lg p-6">
+          <div className="bg-[#181818] rounded-lg p-6 border border-[#404040]">
             <h2 className="text-xl font-semibold text-white mb-4">
               Players ({lobby.players.length})
             </h2>
@@ -269,28 +291,38 @@ export default function LobbyPage({ params }: Props) {
               {lobby.players.map((player) => (
                 <div
                   key={player.id}
-                  className="flex items-center space-x-3 p-3 bg-black bg-opacity-30 rounded-lg"
+                  className="flex items-center space-x-3 p-3 bg-[#282828] rounded-lg hover:bg-[#3e3e3e] transition-colors"
                 >
-                  {player.image && (
+                  {player.image ? (
                     <img
                       src={player.image}
                       alt={player.name}
-                      className="w-10 h-10 rounded-full"
+                      className="w-12 h-12 rounded-full object-cover"
                     />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-[#404040] flex items-center justify-center">
+                      <span className="text-white text-lg font-bold">
+                        {player.name.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
                   )}
                   <div className="flex-1">
-                    <p className="text-white font-medium">
-                      {player.name}
+                    <div className="flex items-center gap-2">
+                      <p className="text-white font-medium">
+                        {player.name}
+                      </p>
                       {player.id === lobby.creatorId && (
-                        <span className="ml-2 text-xs bg-green-600 px-2 py-1 rounded">
+                        <span className="text-xs bg-[#1db954] text-black px-2 py-1 rounded font-bold">
                           Creator
                         </span>
                       )}
-                    </p>
-                    <p className="text-sm text-gray-400">
+                    </div>
+                    <p className="text-sm text-[#b3b3b3]">
                       {lobby.status === 'fetching-tracks' ? (
                         player.isReady ? (
-                          <span className="text-green-400">✓ Ready</span>
+                          <span className="text-[#1db954] flex items-center gap-1">
+                            <span>✓</span> Ready
+                          </span>
                         ) : (
                           <span className="text-yellow-400">Fetching tracks...</span>
                         )
@@ -306,22 +338,22 @@ export default function LobbyPage({ params }: Props) {
         </div>
 
         {/* Game Status */}
-        <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-lg p-6 text-center">
+        <div className="bg-[#181818] rounded-lg p-6 text-center border border-[#404040]">
           {lobby.status === 'waiting' && (
             <>
-              <p className="text-gray-300 mb-4">
+              <p className="text-[#b3b3b3] mb-4">
                 Waiting for players to join. Share the lobby ID or link with your friends!
               </p>
               {isCreator && lobby.players.length >= 2 && (
                 <button
                   onClick={startGame}
-                  className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition duration-200"
+                  className="bg-[#1db954] hover:bg-[#1ed760] text-black font-bold py-3 px-8 rounded-full text-lg transition-colors shadow-lg"
                 >
                   Start Game
                 </button>
               )}
               {lobby.players.length < 2 && (
-                <p className="text-yellow-400">
+                <p className="text-yellow-400 bg-yellow-400/10 border border-yellow-400/20 rounded-lg p-3">
                   You need at least 2 players to start the game
                 </p>
               )}
@@ -336,19 +368,21 @@ export default function LobbyPage({ params }: Props) {
               {currentPlayer && !currentPlayer.isReady && !isFetchingTracks && !tracksFetched && (
                 <button
                   onClick={fetchTopTracks}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition duration-200"
+                  className="bg-[#1db954] hover:bg-[#1ed760] text-black font-bold py-3 px-6 rounded-full text-lg transition-colors"
                 >
                   Fetch My Tracks
                 </button>
               )}
               {isFetchingTracks && (
                 <div className="text-white">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-400 mx-auto mb-2"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1db954] mx-auto mb-2"></div>
                   Fetching your top tracks...
                 </div>
               )}
               {tracksFetched && (
-                <p className="text-green-400">✓ Your tracks have been loaded!</p>
+                <p className="text-[#1db954] flex items-center justify-center gap-2">
+                  <span>✓</span> Your tracks have been loaded!
+                </p>
               )}
             </>
           )}
@@ -358,7 +392,7 @@ export default function LobbyPage({ params }: Props) {
         <div className="text-center">
           <button
             onClick={() => router.push('/')}
-            className="text-green-400 hover:text-green-300 underline"
+            className="text-[#1db954] hover:text-[#1ed760] underline transition-colors"
           >
             ← Back to Home
           </button>

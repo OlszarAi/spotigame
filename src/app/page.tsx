@@ -20,8 +20,11 @@ export default function HomePage() {
 
   if (status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-white text-xl">Loading...</div>
+      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1db954] mx-auto mb-4"></div>
+          <div className="text-white text-xl">Loading...</div>
+        </div>
       </div>
     )
   }
@@ -83,24 +86,24 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#121212] flex items-center justify-center p-4">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <h1 className="text-4xl font-bold text-white mb-2">
             🎵 SpotiGame
           </h1>
-          <p className="text-green-400 text-lg">
+          <p className="text-[#1db954] text-lg font-medium">
             Guess whose music is playing!
           </p>
-          <div className="mt-4 p-4 bg-black bg-opacity-50 rounded-lg">
-            <p className="text-white text-sm">
+          <div className="mt-4 p-4 bg-[#181818] rounded-lg border border-[#404040]">
+            <p className="text-white text-sm mb-2">
               Welcome, {session.user?.name}!
             </p>
             {session.user?.image && (
               <img
                 src={session.user.image}
                 alt="Profile"
-                className="w-12 h-12 rounded-full mx-auto mt-2"
+                className="w-12 h-12 rounded-full mx-auto"
               />
             )}
           </div>
@@ -108,36 +111,36 @@ export default function HomePage() {
 
         <div className="space-y-6">
           {/* Create Lobby Section */}
-          <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-lg p-6 space-y-4">
+          <div className="bg-[#181818] rounded-lg p-6 space-y-4 border border-[#404040]">
             <h2 className="text-xl font-semibold text-white mb-4">Create a New Game</h2>
             
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-green-400 mb-1">
+                <label className="block text-sm font-medium text-[#b3b3b3] mb-2">
                   Number of Rounds
                 </label>
                 <select
                   value={lobbySettings.numberOfRounds}
                   onChange={(e) => setLobbySettings(prev => ({ ...prev, numberOfRounds: parseInt(e.target.value) }))}
-                  className="w-full px-3 py-2 bg-black bg-opacity-50 border border-green-500 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-400"
+                  className="w-full px-3 py-2 bg-[#121212] border border-[#404040] rounded-md text-white focus:outline-none focus:border-[#1db954] focus:ring-1 focus:ring-[#1db954] transition-colors"
                 >
                   {[5, 10, 15, 20].map(num => (
-                    <option key={num} value={num}>{num} rounds</option>
+                    <option key={num} value={num} className="bg-[#121212]">{num} rounds</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-green-400 mb-1">
+                <label className="block text-sm font-medium text-[#b3b3b3] mb-2">
                   Song Duration (seconds)
                 </label>
                 <select
                   value={lobbySettings.listeningDuration}
                   onChange={(e) => setLobbySettings(prev => ({ ...prev, listeningDuration: parseInt(e.target.value) }))}
-                  className="w-full px-3 py-2 bg-black bg-opacity-50 border border-green-500 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-green-400"
+                  className="w-full px-3 py-2 bg-[#121212] border border-[#404040] rounded-md text-white focus:outline-none focus:border-[#1db954] focus:ring-1 focus:ring-[#1db954] transition-colors"
                 >
                   {[15, 30, 45, 60].map(num => (
-                    <option key={num} value={num}>{num} seconds</option>
+                    <option key={num} value={num} className="bg-[#121212]">{num} seconds</option>
                   ))}
                 </select>
               </div>
@@ -148,9 +151,9 @@ export default function HomePage() {
                   id="showTrackInfo"
                   checked={lobbySettings.showTrackInfo}
                   onChange={(e) => setLobbySettings(prev => ({ ...prev, showTrackInfo: e.target.checked }))}
-                  className="mr-2 accent-green-500"
+                  className="mr-3 w-4 h-4 accent-[#1db954] bg-[#121212] border-[#404040] rounded focus:ring-[#1db954]"
                 />
-                <label htmlFor="showTrackInfo" className="text-sm text-green-400">
+                <label htmlFor="showTrackInfo" className="text-sm text-[#b3b3b3]">
                   Show track title and artist
                 </label>
               </div>
@@ -159,18 +162,18 @@ export default function HomePage() {
             <button
               onClick={createLobby}
               disabled={isCreatingLobby}
-              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-800 text-white font-bold py-3 px-4 rounded-lg transition duration-200"
+              className="w-full bg-[#1db954] hover:bg-[#1ed760] disabled:bg-[#169c46] disabled:opacity-50 text-black font-bold py-3 px-4 rounded-full transition-colors"
             >
               {isCreatingLobby ? 'Creating...' : 'Create Lobby'}
             </button>
           </div>
 
           {/* Join Lobby Section */}
-          <div className="bg-white bg-opacity-10 backdrop-blur-md rounded-lg p-6 space-y-4">
+          <div className="bg-[#181818] rounded-lg p-6 space-y-4 border border-[#404040]">
             <h2 className="text-xl font-semibold text-white mb-4">Join Existing Game</h2>
             
             <div>
-              <label className="block text-sm font-medium text-green-400 mb-1">
+              <label className="block text-sm font-medium text-[#b3b3b3] mb-2">
                 Lobby ID
               </label>
               <input
@@ -178,14 +181,14 @@ export default function HomePage() {
                 value={joinLobbyId}
                 onChange={(e) => setJoinLobbyId(e.target.value)}
                 placeholder="Enter lobby ID..."
-                className="w-full px-3 py-2 bg-black bg-opacity-50 border border-green-500 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-400"
+                className="w-full px-3 py-2 bg-[#121212] border border-[#404040] rounded-md text-white placeholder-[#757575] focus:outline-none focus:border-[#1db954] focus:ring-1 focus:ring-[#1db954] transition-colors"
               />
             </div>
 
             <button
               onClick={joinLobby}
               disabled={isJoining || !joinLobbyId.trim()}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white font-bold py-3 px-4 rounded-lg transition duration-200"
+              className="w-full bg-[#1db954] hover:bg-[#1ed760] disabled:bg-[#404040] disabled:opacity-50 text-black font-bold py-3 px-4 rounded-full transition-colors disabled:text-[#757575]"
             >
               {isJoining ? 'Joining...' : 'Join Lobby'}
             </button>
@@ -195,7 +198,7 @@ export default function HomePage() {
         <div className="text-center">
           <button
             onClick={() => router.push('/api/auth/signout')}
-            className="text-green-400 hover:text-green-300 underline"
+            className="text-[#1db954] hover:text-[#1ed760] underline transition-colors"
           >
             Sign out
           </button>
