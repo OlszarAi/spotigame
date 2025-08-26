@@ -1,14 +1,14 @@
 {
   "version": 2,
-  "functions": {
-    "src/pages/api/socketio.ts": {
-      "maxDuration": 30
-    }
-  },
-  "rewrites": [
+  "builds": [
     {
-      "source": "/socket.io/(.*)",
-      "destination": "/api/socketio"
+      "src": "package.json",
+      "use": "@vercel/node"
     }
-  ]
+  ],
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "runtime": "@vercel/node"
+    }
+  }
 }

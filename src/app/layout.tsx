@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Providers } from './providers'
+import { SessionProvider } from '@/components/SessionProvider'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SpotiGame - Guess Who Added That Track!",
-  description: "A fun multiplayer game where you guess who added tracks to your Spotify Blend playlist.",
+  title: "SpotiGame - Spotify Music Guessing Game",
+  description: "A fun multiplayer game where you guess which player's music is playing",
 };
 
 export default function RootLayout({
@@ -26,11 +26,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-gradient-to-br from-green-900 via-black to-green-800`}
       >
-        <Providers>
+        <SessionProvider>
           {children}
-        </Providers>
+        </SessionProvider>
       </body>
     </html>
   );
