@@ -13,6 +13,7 @@ export function useGameState(lobbyId: string) {
   const [roundInfo, setRoundInfo] = useState({ current: 0, total: 0 })
   const [timeLeft, setTimeLeft] = useState(0)
   const [scores, setScores] = useState<Array<{ userId: string; userName: string; score: number }>>([])
+  const [authStatus, setAuthStatus] = useState<Record<string, boolean>>({})
 
   const socket = GameSocket.getInstance()
 
@@ -35,8 +36,25 @@ export function useGameState(lobbyId: string) {
     }
   }, [lobbyId])
 
+  // Fetch auth status for all players
+  const fetchAuthStatus = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/player-auth?lobbyId=${lobbyId}`)
+      const data = await response.json()
+
+      if (response.ok) {
+        setAuthStatus(data.authStatus || {})
+      }
+    } catch (error) {
+      console.error('Error fetching auth status:', error)
+    }
+  }, [lobbyId])
+
   // Subscribe to real-time updates
   useEffect(() => {
+    fetchLobby()
+    fetchAuthStatus()
+
     const handleLobbyUpdate = (updatedLobby: Lobby) => {
       setLobby(updatedLobby)
       
@@ -52,12 +70,11 @@ export function useGameState(lobbyId: string) {
     }
 
     socket.subscribeLobby(lobbyId, handleLobbyUpdate)
-    fetchLobby()
 
     return () => {
       socket.unsubscribeLobby(lobbyId, handleLobbyUpdate)
     }
-  }, [lobbyId, fetchLobby, currentTrack])
+  }, [lobbyId, fetchLobby, fetchAuthStatus, currentTrack])
 
   const joinLobby = async () => {
     try {
@@ -77,7 +94,6 @@ export function useGameState(lobbyId: string) {
 
   const startGame = async () => {
     try {
-      console.log('🎮 Starting game and collecting top tracks...')
       const response = await fetch('/api/game', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,58 +101,63 @@ export function useGameState(lobbyId: string) {
       })
 
       const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error)
-      }
 
-      console.log('✅ Game started successfully')
-      fetchLobby()
-      return data
+      if (response.ok) {
+        console.log('🎮 Game started successfully')
+        fetchLobby()
+        return data
+      } else {
+        throw new Error(data.error || 'Failed to start game')
+      }
     } catch (error) {
-      console.error('Start game error:', error)
+      console.error('Error starting game:', error)
       throw error
     }
   }
 
   const loadCurrentTrack = async () => {
     try {
-      const response = await fetch(`/api/game?lobbyId=${lobbyId}&action=current-track`)
+      const response = await fetch(`/api/game?lobbyId=${lobbyId}&action=currentTrack`)
       const data = await response.json()
 
       if (response.ok) {
         setCurrentTrack(data.track)
-        setGameOptions(data.options)
-        setRoundInfo({ current: data.roundNumber, total: data.totalRounds })
-        setTimeLeft(lobby?.settings.roundDuration || 30)
-        return data
+        // Set game options to all players in the lobby for multiplayer
+        if (lobby?.players) {
+          const playerOptions = lobby.players.map(player => ({
+            id: player.id,
+            name: player.name
+          }))
+          setGameOptions(playerOptions)
+        } else {
+          setGameOptions(data.options || [])
+        }
+        setRoundInfo(data.roundInfo)
+        setTimeLeft(data.timeLeft)
       }
     } catch (error) {
       console.error('Error loading current track:', error)
     }
   }
 
-  const submitGuess = async (guessedUserId: string) => {
+  const submitGuess = async (guess: string) => {
     try {
       const response = await fetch('/api/game', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          lobbyId,
-          action: 'submit-guess',
-          data: {
-            guessedUserId,
-            roundNumber: roundInfo.current
-          }
-        }),
+        body: JSON.stringify({ lobbyId, action: 'guess', guess }),
       })
 
       const data = await response.json()
-      if (!response.ok) {
-        throw new Error(data.error)
+      
+      if (response.ok) {
+        setScores(data.scores || [])
+        return data
+      } else {
+        throw new Error(data.error || 'Failed to submit guess')
       }
-
-      return data
     } catch (error) {
+      console.error('Error submitting guess:', error)
       throw error
     }
   }
@@ -146,19 +167,16 @@ export function useGameState(lobbyId: string) {
       const response = await fetch('/api/game', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lobbyId, action: 'next-round' }),
+        body: JSON.stringify({ lobbyId, action: 'nextRound' }),
       })
 
-      const data = await response.json()
       if (response.ok) {
-        if (data.isFinished) {
-          loadLeaderboard()
-        } else {
-          loadCurrentTrack()
-        }
+        setCurrentTrack(null)
+        setGameOptions([])
+        loadCurrentTrack()
       }
     } catch (error) {
-      console.error('Error advancing round:', error)
+      console.error('Error going to next round:', error)
     }
   }
 
@@ -175,6 +193,28 @@ export function useGameState(lobbyId: string) {
     }
   }
 
+  // Multiplayer authorization functions
+  const authorizePlayer = async () => {
+    try {
+      const response = await fetch('/api/player-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lobbyId }),
+      })
+
+      if (response.ok) {
+        await fetchAuthStatus()
+        return true
+      } else {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to authorize player')
+      }
+    } catch (error) {
+      console.error('Error authorizing player:', error)
+      throw error
+    }
+  }
+
   return {
     lobby,
     loading,
@@ -185,12 +225,15 @@ export function useGameState(lobbyId: string) {
     timeLeft,
     setTimeLeft,
     scores,
+    authStatus,
     joinLobby,
     startGame,
     loadCurrentTrack,
     submitGuess,
     nextRound,
     loadLeaderboard,
-    fetchLobby
+    fetchLobby,
+    authorizePlayer,
+    fetchAuthStatus
   }
 }

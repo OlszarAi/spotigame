@@ -24,16 +24,20 @@ export default function GamePage({ params }: GamePageProps) {
     timeLeft,
     setTimeLeft,
     scores,
+    authStatus,
     joinLobby,
     startGame,
     submitGuess,
     nextRound,
+    authorizePlayer,
+    fetchAuthStatus,
   } = useGameState(params.lobbyId)
 
   const [selectedGuess, setSelectedGuess] = useState('')
   const [showResults, setShowResults] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isStartingGame, setIsStartingGame] = useState(false)
+  const [isAuthorizing, setIsAuthorizing] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
@@ -129,6 +133,21 @@ export default function GamePage({ params }: GamePageProps) {
     }
   }
 
+  const handleAuthorizePlayer = async () => {
+    if (isAuthorizing) return
+    
+    setIsAuthorizing(true)
+    try {
+      await authorizePlayer()
+      // Success will be reflected by authStatus update
+    } catch (error: any) {
+      console.error('Authorization error:', error)
+      alert(error.message || 'Failed to authorize. Please try again.')
+    } finally {
+      setIsAuthorizing(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -188,23 +207,46 @@ export default function GamePage({ params }: GamePageProps) {
                 </div>
               </div>
 
-              {/* Players List */}
+              {/* Players List with Authorization Status */}
               <div className="mb-6">
                 <h3 className="text-xl font-semibold text-white mb-4">
                   Players ({lobby.players.length})
                 </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {lobby.players.map((player) => (
-                    <div key={player.id} className="flex items-center space-x-2 bg-gray-800 p-3 rounded">
-                      {player.image && (
-                        <img src={player.image} alt={player.name} className="w-6 h-6 rounded-full" />
-                      )}
-                      <span className="text-white">{player.name}</span>
-                      {player.id === lobby.ownerId && (
-                        <span className="text-yellow-400 text-xs">(Owner)</span>
-                      )}
-                    </div>
-                  ))}
+                <div className="grid grid-cols-1 gap-3">
+                  {lobby.players.map((player) => {
+                    const isAuthorized = authStatus?.[player.id] || false
+                    const isCurrentUser = player.id === session?.user?.email
+                    
+                    return (
+                      <div key={player.id} className="flex items-center justify-between bg-gray-800 p-4 rounded-lg">
+                        <div className="flex items-center space-x-3">
+                          {player.image && (
+                            <img src={player.image} alt={player.name} className="w-8 h-8 rounded-full" />
+                          )}
+                          <div>
+                            <div className="text-white font-medium">{player.name}</div>
+                            <div className="text-xs text-gray-400">
+                              {player.id === lobby.ownerId && "Owner • "}
+                              {isCurrentUser && "You • "}
+                              <span className={isAuthorized ? "text-green-400" : "text-yellow-400"}>
+                                {isAuthorized ? "✅ Authorized" : "⏳ Authorization needed"}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {isCurrentUser && !isAuthorized && (
+                          <button
+                            onClick={handleAuthorizePlayer}
+                            disabled={isAuthorizing}
+                            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                          >
+                            {isAuthorizing ? '🔄 Authorizing...' : 'Authorize Spotify'}
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
@@ -220,24 +262,67 @@ export default function GamePage({ params }: GamePageProps) {
 
               {/* Game Info */}
               <div className="mb-6 bg-gradient-to-r from-green-600 to-blue-600 rounded-lg p-4">
-                <h4 className="text-white font-bold mb-2">🎵 Demo Mode - Single Player</h4>
+                <h4 className="text-white font-bold mb-2">🎵 Multiplayer Mode</h4>
                 <p className="text-white text-sm opacity-90">
-                  Currently using only the lobby owner's top tracks from the last 4 weeks. 
-                  You'll be guessing which of YOUR songs is playing! 
-                  Multi-player support (collecting tracks from all players) coming soon.
+                  All players need to authorize Spotify access to share their top tracks. 
+                  The game will include tracks from all authorized players. 
+                  You'll guess whose favorite songs are playing!
                 </p>
               </div>
+
+              {/* Authorization Status */}
+              {lobby.players.length > 1 && (
+                <div className="mb-6 bg-gray-800 rounded-lg p-4">
+                  <h4 className="text-white font-semibold mb-2">Authorization Status</h4>
+                  {(() => {
+                    const authorizedCount = Object.values(authStatus).filter(Boolean).length
+                    const totalPlayers = lobby.players.length
+                    const allAuthorized = authorizedCount === totalPlayers
+                    
+                    return (
+                      <div className="text-sm">
+                        <div className={`font-medium ${allAuthorized ? 'text-green-400' : 'text-yellow-400'}`}>
+                          {authorizedCount}/{totalPlayers} players authorized
+                        </div>
+                        {!allAuthorized && (
+                          <div className="text-gray-400 mt-1">
+                            Waiting for all players to authorize Spotify access...
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
 
               {/* Owner Controls */}
               {isOwner && (
                 <div className="space-y-4">
-                  <button
-                    onClick={handleStartGame}
-                    disabled={isStartingGame}
-                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg transition-colors"
-                  >
-                    {isStartingGame ? '🔄 Collecting Your Top Tracks...' : '🚀 Start Demo Game (Your Top Tracks)'}
-                  </button>
+                  {(() => {
+                    const authorizedCount = Object.values(authStatus).filter(Boolean).length
+                    const totalPlayers = lobby.players.length
+                    const allAuthorized = authorizedCount === totalPlayers
+                    const canStart = allAuthorized && totalPlayers > 0
+                    
+                    return (
+                      <button
+                        onClick={handleStartGame}
+                        disabled={isStartingGame || !canStart}
+                        className={`w-full font-bold py-3 px-6 rounded-lg transition-colors ${
+                          canStart
+                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                            : 'bg-gray-600 cursor-not-allowed text-gray-300'
+                        }`}
+                      >
+                        {isStartingGame 
+                          ? '🔄 Starting Multiplayer Game...' 
+                          : !allAuthorized 
+                          ? `⏳ Waiting for Authorization (${authorizedCount}/${totalPlayers})`
+                          : '🚀 Start Multiplayer Game'
+                        }
+                      </button>
+                    )
+                  })()}
                 </div>
               )}
             </div>
@@ -276,7 +361,7 @@ export default function GamePage({ params }: GamePageProps) {
               {/* Guessing Options */}
               <div className="mb-8">
                 <h3 className="text-xl font-semibold text-white mb-4 text-center">
-                  Who added this track to the playlist?
+                  🎵 Whose favorite song is this?
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {gameOptions.map((option) => (

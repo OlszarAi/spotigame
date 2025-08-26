@@ -3,12 +3,8 @@ import SpotifyProvider from "next-auth/providers/spotify"
 
 const scopes = [
   "user-read-email",
-  "user-read-private",
-  "playlist-read-private",
-  "playlist-read-collaborative",
-  "user-library-read",
-  "user-read-recently-played",
-  "user-follow-read",
+  "user-read-private", 
+  "user-top-read", // For accessing user's top tracks
 ].join(",")
 
 const params = {

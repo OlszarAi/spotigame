@@ -5,6 +5,7 @@ class GameStore {
   private lobbies = new Map<string, Lobby>()
   private gameRounds = new Map<string, GameRound[]>()
   private playerScores = new Map<string, PlayerScore[]>()
+  private playerTokens = new Map<string, Map<string, string>>() // lobbyId -> userId -> accessToken
 
   static getInstance(): GameStore {
     if (!GameStore.instance) {
@@ -37,7 +38,35 @@ class GameStore {
     this.lobbies.delete(lobbyId)
     this.playerScores.delete(lobbyId)
     this.gameRounds.delete(lobbyId)
+    this.playerTokens.delete(lobbyId)
     return true
+  }
+
+  // Player token management
+  storePlayerToken(lobbyId: string, userId: string, accessToken: string): void {
+    if (!this.playerTokens.has(lobbyId)) {
+      this.playerTokens.set(lobbyId, new Map())
+    }
+    this.playerTokens.get(lobbyId)!.set(userId, accessToken)
+  }
+
+  getPlayerToken(lobbyId: string, userId: string): string | undefined {
+    return this.playerTokens.get(lobbyId)?.get(userId)
+  }
+
+  getAllPlayerTokens(lobbyId: string): Array<{userId: string, accessToken: string}> {
+    const lobbyTokens = this.playerTokens.get(lobbyId)
+    if (!lobbyTokens) return []
+    
+    return Array.from(lobbyTokens.entries()).map(([userId, accessToken]) => ({
+      userId,
+      accessToken
+    }))
+  }
+
+  getPlayersWithTokens(lobbyId: string): string[] {
+    const lobbyTokens = this.playerTokens.get(lobbyId)
+    return lobbyTokens ? Array.from(lobbyTokens.keys()) : []
   }
 
   // Game rounds management

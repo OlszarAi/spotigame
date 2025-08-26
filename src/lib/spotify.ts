@@ -70,11 +70,20 @@ export class SpotifyService {
   async createGameTracksPool(userTokens: Array<{userId: string, userName: string, accessToken: string}>, tracksPerUser: number = 10): Promise<Track[]> {
     const allTracks: Track[] = []
     
+    console.log(`🎵 Starting to collect tracks from ${userTokens.length} players...`)
+    
     for (const user of userTokens) {
       try {
+        console.log(`📥 Collecting tracks for ${user.userName}...`)
+        
         // Create new service instance for each user
         const userSpotifyService = new SpotifyService(user.accessToken)
-        const userTopTracks = await userSpotifyService.getTopTracks(user.userId, 50)
+        const userTopTracks = await userSpotifyService.getTopTracks(user.userId, 50) // Get more to have selection
+        
+        if (userTopTracks.length === 0) {
+          console.warn(`⚠️ No tracks found for ${user.userName}`)
+          continue
+        }
         
         // Add user name to tracks
         const tracksWithUserInfo = userTopTracks.map(track => ({
@@ -95,12 +104,17 @@ export class SpotifyService {
     }
     
     if (allTracks.length === 0) {
-      throw new Error('No tracks could be gathered from any user')
+      throw new Error('No tracks could be gathered from any player. Make sure players have recent listening history.')
     }
     
+    // Remove duplicates by track ID
+    const uniqueTracks = allTracks.filter((track, index, self) => 
+      index === self.findIndex(t => t.id === track.id)
+    )
+    
     // Shuffle the final pool
-    const shuffledPool = allTracks.sort(() => 0.5 - Math.random())
-    console.log(`🎮 Created game pool with ${shuffledPool.length} tracks from ${userTokens.length} users`)
+    const shuffledPool = uniqueTracks.sort(() => 0.5 - Math.random())
+    console.log(`🎮 Created game pool with ${shuffledPool.length} unique tracks from ${userTokens.length} users`)
     
     return shuffledPool
   }

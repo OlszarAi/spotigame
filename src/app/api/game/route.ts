@@ -33,54 +33,49 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'start':
-        // Get session with access token for the owner
-        const sessionWithToken = await getServerSession(authOptions) as any
+        console.log('🎮 Starting multiplayer game - collecting top tracks from all players')
         
-        if (!sessionWithToken?.accessToken) {
+        // Check if all players have authorized
+        const playersWithTokens = gameStore.getPlayersWithTokens(lobbyId)
+        const allPlayerIds = lobby.players.map(p => p.id)
+        
+        if (playersWithTokens.length !== allPlayerIds.length) {
+          const missingPlayers = allPlayerIds.filter(id => !playersWithTokens.includes(id))
           return NextResponse.json({ 
-            error: 'No Spotify access token found. Please sign out and sign in again.' 
-          }, { status: 401 })
+            error: 'Not all players have authorized Spotify access',
+            missingPlayers: missingPlayers,
+            message: 'All players must authorize before starting the game'
+          }, { status: 400 })
         }
 
-        console.log('🎮 Starting game - collecting top tracks from owner (single player demo)')
-        
         try {
+          const allTokens = gameStore.getAllPlayerTokens(lobbyId)
+          const userTokens = allTokens.map(token => {
+            const player = lobby.players.find(p => p.id === token.userId)
+            return {
+              userId: token.userId,
+              userName: player?.name || 'Unknown Player',
+              accessToken: token.accessToken
+            }
+          })
+
+          console.log(`🎵 Collecting top tracks from ${userTokens.length} players`)
+          
+          // Use the updated SpotifyService method
+          const sessionWithToken = await getServerSession(authOptions) as any
           const spotifyService = new SpotifyService(sessionWithToken.accessToken)
+          const tracks = await spotifyService.createGameTracksPool(userTokens, lobby.settings.tracksPerUser)
           
-          // For now, just use owner's tracks (single player demo)
-          // TODO: Implement multi-player token collection system
-          console.log('📝 Getting top tracks for owner:', session.user.email)
-          const ownerTracks = await spotifyService.getTopTracks(session.user.email!, lobby.settings.tracksPerUser)
-          
-          if (ownerTracks.length === 0) {
+          if (tracks.length === 0) {
             return NextResponse.json({ 
-              error: 'No top tracks found. Make sure you have recent listening history on Spotify.' 
+              error: 'No top tracks found from any player. Make sure players have recent listening history.' 
             }, { status: 400 })
           }
 
-          // Add owner's name to tracks
-          const tracksWithUserInfo = ownerTracks.map(track => ({
-            ...track,
-            user_name: session.user.name || 'Unknown User'
-          }))
-
-          console.log(`✅ Successfully collected ${tracksWithUserInfo.length} tracks from owner`)
-          
-          // For single player demo, duplicate some tracks to have enough for game
-          let gameTrackPool = [...tracksWithUserInfo]
-          if (gameTrackPool.length < lobby.settings.numberOfRounds) {
-            // Duplicate tracks if we don't have enough
-            while (gameTrackPool.length < lobby.settings.numberOfRounds) {
-              gameTrackPool = [...gameTrackPool, ...tracksWithUserInfo]
-            }
-          }
-          
-          // Shuffle and take only what we need
-          const shuffledTracks = gameTrackPool.sort(() => 0.5 - Math.random())
-          const finalTracks = shuffledTracks.slice(0, lobby.settings.numberOfRounds)
+          console.log(`✅ Successfully collected ${tracks.length} tracks from ${userTokens.length} players`)
           
           // Update lobby with tracks
-          gameStore.updateLobby(lobbyId, { tracks: finalTracks })
+          gameStore.updateLobby(lobbyId, { tracks })
 
           // Initialize player scores
           const playerIds = lobby.players.map(p => p.id)
@@ -93,9 +88,9 @@ export async function POST(request: NextRequest) {
           })
 
           return NextResponse.json({ 
-            message: 'Game started with owner\'s top tracks (single player demo)',
-            trackCount: finalTracks.length,
-            note: 'Currently using owner\'s tracks only. Multi-player support coming soon!'
+            message: 'Multiplayer game started successfully!',
+            trackCount: tracks.length,
+            playersCount: userTokens.length
           })
         } catch (error: any) {
           console.error('Error collecting top tracks:', error)
@@ -122,38 +117,43 @@ export async function POST(request: NextRequest) {
           isFinished: finalLobby?.status === 'finished'
         })
 
-      case 'submit-guess':
-        const { guessedUserId, roundNumber } = data
+      case 'guess':
+        const { guess } = data
         
-        if (!guessedUserId || !roundNumber) {
+        if (!guess) {
           return NextResponse.json({ error: 'Invalid guess data' }, { status: 400 })
         }
 
-        // Get current track
-        const currentTrack = gameStore.getRandomTrack(lobbyId, roundNumber)
+        // Get current track for current round
+        const currentTrack = gameStore.getRandomTrack(lobbyId, lobby.currentRound)
         if (!currentTrack) {
           return NextResponse.json({ error: 'No current track' }, { status: 400 })
         }
 
         // Calculate score
-        const points = gameStore.calculateRoundScore(lobbyId, session.user.email!, guessedUserId, currentTrack.user_id)
+        const points = gameStore.calculateRoundScore(lobbyId, session.user.email!, guess, currentTrack.user_id)
         gameStore.updatePlayerScore(lobbyId, session.user.email!, points)
 
         // Create game round record
         const gameRound: GameRound = {
-          roundNumber,
+          roundNumber: lobby.currentRound,
           track: currentTrack,
           correctAnswer: currentTrack.user_id,
-          playerGuesses: { [session.user.email!]: guessedUserId },
+          playerGuesses: { [session.user.email!]: guess },
           startTime: new Date(),
           endTime: new Date(),
         }
         gameStore.addGameRound(lobbyId, gameRound)
 
+        // Get updated scores to return
+        const updatedScores = gameStore.getPlayerScores(lobbyId)
+
         return NextResponse.json({ 
           message: 'Guess submitted',
           correct: points > 0,
-          correctAnswer: currentTrack.user_name
+          correctAnswer: currentTrack.user_name,
+          scores: updatedScores,
+          points
         })
 
       default:
@@ -181,6 +181,7 @@ export async function GET(request: NextRequest) {
     }
 
     switch (action) {
+      case 'currentTrack':
       case 'current-track':
         if (lobby.status !== 'playing' || lobby.tracks.length === 0) {
           return NextResponse.json({ error: 'Game not active' }, { status: 400 })
