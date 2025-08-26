@@ -39,7 +39,11 @@ export class LobbyManager {
     // Check if player is already in lobby
     const existingPlayerIndex = lobby.players.findIndex(p => p.id === playerId)
     if (existingPlayerIndex >= 0) {
-      return lobby // Player already in lobby
+      // Update existing player info in case it changed
+      lobby.players[existingPlayerIndex].name = playerName
+      lobby.players[existingPlayerIndex].image = playerImage
+      this.lobbies.set(lobbyId, lobby)
+      return lobby
     }
 
     const newPlayer: Player = {
@@ -68,12 +72,8 @@ export class LobbyManager {
       lobby.creatorName = lobby.players[0].name
     }
 
-    // If no players left, delete the lobby
-    if (lobby.players.length === 0) {
-      this.lobbies.delete(lobbyId)
-      return null
-    }
-
+    // Don't delete lobby immediately - keep it for a while in case players rejoin
+    // Only remove from memory after significant time or when explicitly deleted
     this.lobbies.set(lobbyId, lobby)
     return lobby
   }

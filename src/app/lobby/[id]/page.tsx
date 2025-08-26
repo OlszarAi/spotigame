@@ -59,8 +59,12 @@ export default function LobbyPage({ params }: Props) {
       })
       
       if (!response.ok) {
-        throw new Error('Failed to join lobby')
+        const errorData = await response.json()
+        console.error('Failed to join lobby:', errorData.error)
+        return
       }
+      
+      console.log('Successfully joined lobby')
     } catch (error) {
       console.error('Error joining lobby:', error)
     }
@@ -102,8 +106,8 @@ export default function LobbyPage({ params }: Props) {
     fetchLobby()
 
     return () => {
-      // Leave lobby when component unmounts
-      leaveLobbyAPI()
+      // Only leave lobby when actually navigating away, not on re-renders
+      // Don't leave lobby on unmount to prevent accidental deletion
       clearInterval(pollInterval)
     }
   }, [session, status, lobbyId, router, joinLobbyAPI, leaveLobbyAPI, fetchLobby])
