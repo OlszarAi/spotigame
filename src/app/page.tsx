@@ -108,9 +108,11 @@ export default function Home() {
                   placeholder="https://open.spotify.com/playlist/..."
                   className="w-full px-4 py-3 bg-gray-800 text-white rounded-lg border border-gray-700 focus:border-green-500 focus:outline-none"
                 />
-                <p className="text-gray-400 text-sm mt-1">
-                  Get the share link from your Spotify Blend playlist
-                </p>
+                <div className="text-gray-400 text-sm mt-1 space-y-1">
+                  <p>Get the share link from your Spotify Blend playlist</p>
+                  <p className="text-yellow-400">⚠️ Make sure you have access to this playlist and it's a Blend/collaborative playlist</p>
+                  <p className="text-blue-400">💡 If you get "Failed to load playlist", try signing out and back in to refresh your Spotify access</p>
+                </div>
               </div>
 
               {/* Number of Rounds */}

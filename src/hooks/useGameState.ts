@@ -85,11 +85,12 @@ export function useGameState(lobbyId: string) {
 
       const data = await response.json()
       if (!response.ok) {
-        throw new Error(data.error)
+        throw new Error(data.error || 'Failed to load playlist')
       }
 
       return data
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Load playlist error:', error)
       throw error
     }
   }

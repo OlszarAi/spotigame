@@ -20,11 +20,22 @@ export class SpotifyService {
     }
 
     try {
+      console.log('Fetching playlist with ID:', playlistId)
       const playlist = await this.spotifyApi.getPlaylist(playlistId)
+      console.log('Playlist fetched successfully:', playlist.body.name)
       return playlist.body
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching playlist:', error)
-      throw new Error('Failed to fetch playlist')
+      
+      if (error.statusCode === 401) {
+        throw new Error('Spotify authentication expired. Please sign out and sign in again.')
+      } else if (error.statusCode === 403) {
+        throw new Error('Access forbidden. Make sure the playlist is public or you have access to it.')
+      } else if (error.statusCode === 404) {
+        throw new Error('Playlist not found. Check the URL and make sure the playlist exists.')
+      } else {
+        throw new Error(`Spotify API error: ${error.message || 'Unknown error'}`)
+      }
     }
   }
 

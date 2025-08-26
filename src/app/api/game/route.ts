@@ -32,24 +32,46 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case 'load-playlist':
-        // @ts-ignore - We know accessToken exists from NextAuth callback
-        const spotifyService = new SpotifyService(session.accessToken)
+        // Get session with access token
+        const sessionWithToken = await getServerSession() as any
+        
+        if (!sessionWithToken?.accessToken) {
+          return NextResponse.json({ 
+            error: 'No Spotify access token found. Please sign out and sign in again.' 
+          }, { status: 401 })
+        }
+
+        console.log('Loading playlist:', lobby.settings.playlistUrl)
+        console.log('Access token exists:', !!sessionWithToken.accessToken)
+        
+        const spotifyService = new SpotifyService(sessionWithToken.accessToken)
         
         try {
+          // First check if it's a Blend playlist
+          const isBlend = await spotifyService.isBlendPlaylist(lobby.settings.playlistUrl)
+          console.log('Is Blend playlist:', isBlend)
+          
           const tracks = await spotifyService.getPlaylistTracks(lobby.settings.playlistUrl)
           
           if (tracks.length === 0) {
-            return NextResponse.json({ error: 'No playable tracks found in playlist' }, { status: 400 })
+            return NextResponse.json({ 
+              error: 'No playable tracks found in playlist. Make sure the playlist has tracks with preview URLs and you have access to it.' 
+            }, { status: 400 })
           }
 
+          console.log('Successfully loaded', tracks.length, 'tracks')
           gameStore.updateLobby(lobbyId, { tracks })
 
           return NextResponse.json({ 
             message: 'Playlist loaded successfully',
-            trackCount: tracks.length 
+            trackCount: tracks.length,
+            isBlend: isBlend
           })
-        } catch (error) {
-          return NextResponse.json({ error: 'Failed to load playlist' }, { status: 400 })
+        } catch (error: any) {
+          console.error('Spotify API Error:', error)
+          return NextResponse.json({ 
+            error: `Failed to load playlist: ${error.message}. Make sure you have access to this playlist and it's a public or collaborative playlist.` 
+          }, { status: 400 })
         }
 
       case 'start':
