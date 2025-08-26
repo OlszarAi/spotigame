@@ -148,6 +148,33 @@ export default function GamePage({ params }: GamePageProps) {
     }
   }
 
+  const handleAutoAuthorizeAll = async () => {
+    if (isAuthorizing) return
+    
+    setIsAuthorizing(true)
+    try {
+      const response = await fetch('/api/auto-authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lobbyId: params.lobbyId }),
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok) {
+        alert(`✅ Success!\n\n${data.message}\n\nAuthorized: ${data.authorizedPlayers.join(', ')}`)
+        await fetchAuthStatus() // Refresh auth status
+      } else {
+        throw new Error(data.error || 'Failed to auto-authorize')
+      }
+    } catch (error: any) {
+      console.error('Auto-authorization error:', error)
+      alert(error.message || 'Failed to auto-authorize. Please try again.')
+    } finally {
+      setIsAuthorizing(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
@@ -287,6 +314,22 @@ export default function GamePage({ params }: GamePageProps) {
                         {!allAuthorized && (
                           <div className="text-gray-400 mt-1">
                             Waiting for all players to authorize Spotify access...
+                          </div>
+                        )}
+                        
+                        {/* Emergency Auto-Authorize Button for Owner */}
+                        {isOwner && !allAuthorized && (
+                          <div className="mt-3 p-3 bg-yellow-900 rounded border border-yellow-600">
+                            <div className="text-yellow-200 text-xs mb-2">
+                              🚨 Emergency: If individual authorization fails, you can authorize all players with your token:
+                            </div>
+                            <button
+                              onClick={handleAutoAuthorizeAll}
+                              disabled={isAuthorizing}
+                              className="bg-yellow-600 hover:bg-yellow-700 disabled:bg-gray-600 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
+                            >
+                              {isAuthorizing ? '🔄 Authorizing All...' : '⚡ Auto-Authorize All Players'}
+                            </button>
                           </div>
                         )}
                       </div>
