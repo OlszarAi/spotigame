@@ -3,7 +3,6 @@
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { io, Socket } from 'socket.io-client'
 import { Lobby, LobbySettings } from '@/types'
 
 interface Props {
@@ -14,7 +13,6 @@ export default function LobbyPage({ params }: Props) {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [lobby, setLobby] = useState<Lobby | null>(null)
-  const [socket, setSocket] = useState<Socket | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isFetchingTracks, setIsFetchingTracks] = useState(false)
   const [tracksFetched, setTracksFetched] = useState(false)
@@ -39,43 +37,21 @@ export default function LobbyPage({ params }: Props) {
       return
     }
 
-    // Initialize socket connection
-    const newSocket = io()
-    setSocket(newSocket)
+    // Join the lobby via API
+    joinLobbyAPI()
 
-    // Join the lobby
-    newSocket.emit('join-lobby', {
-      lobbyId: lobbyId,
-      userId: session.user.spotifyId,
-      userName: session.user.name,
-      userImage: session.user.image
-    })
-
-    // Listen for lobby updates
-    newSocket.on('lobby-updated', (updatedLobby: Lobby) => {
-      setLobby(updatedLobby)
-      setIsLoading(false)
-    })
-
-    newSocket.on('game-started', () => {
-      // Fetch user's top tracks when game starts
-      fetchTopTracks()
-    })
-
-    newSocket.on('error', (error: { message: string }) => {
-      setError(error.message)
-      setIsLoading(false)
-    })
+    // Set up polling for lobby updates
+    const pollInterval = setInterval(() => {
+      fetchLobby()
+    }, 2000) // Poll every 2 seconds
 
     // Fetch initial lobby data
     fetchLobby()
 
     return () => {
-      newSocket.emit('leave-lobby', {
-        lobbyId: lobbyId,
-        userId: session?.user?.spotifyId
-      })
-      newSocket.disconnect()
+      // Leave lobby when component unmounts
+      leaveLobbyAPI()
+      clearInterval(pollInterval)
     }
   }, [session, status, lobbyId, router])
 
@@ -93,6 +69,42 @@ export default function LobbyPage({ params }: Props) {
     } catch (error) {
       setError('Failed to load lobby')
       setIsLoading(false)
+    }
+  }
+
+  const joinLobbyAPI = async () => {
+    if (!lobbyId || !session?.user) return
+    
+    try {
+      const response = await fetch('/api/lobby/join', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lobbyId }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to join lobby')
+      }
+    } catch (error) {
+      console.error('Error joining lobby:', error)
+    }
+  }
+
+  const leaveLobbyAPI = async () => {
+    if (!lobbyId || !session?.user) return
+    
+    try {
+      await fetch('/api/lobby/leave', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lobbyId }),
+      })
+    } catch (error) {
+      console.error('Error leaving lobby:', error)
     }
   }
 
@@ -121,21 +133,48 @@ export default function LobbyPage({ params }: Props) {
     }
   }
 
-  const updateSettings = (settings: LobbySettings) => {
-    if (!socket || !isCreator || !lobbyId) return
+  const updateSettings = async (settings: LobbySettings) => {
+    if (!isCreator || !lobbyId) return
     
-    socket.emit('update-lobby-settings', {
-      lobbyId: lobbyId,
-      settings
-    })
+    try {
+      const response = await fetch('/api/lobby/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lobbyId, settings }),
+      })
+      
+      if (response.ok) {
+        // Refresh lobby data
+        fetchLobby()
+      }
+    } catch (error) {
+      console.error('Error updating settings:', error)
+    }
   }
 
-  const startGame = () => {
-    if (!socket || !isCreator || !lobbyId) return
+  const startGame = async () => {
+    if (!isCreator || !lobbyId) return
     
-    socket.emit('start-game', {
-      lobbyId: lobbyId
-    })
+    try {
+      const response = await fetch('/api/lobby/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lobbyId }),
+      })
+      
+      if (response.ok) {
+        const { redirectUrl } = await response.json()
+        if (redirectUrl) {
+          router.push(redirectUrl)
+        }
+      }
+    } catch (error) {
+      console.error('Error starting game:', error)
+    }
   }
 
   const copyLobbyLink = () => {

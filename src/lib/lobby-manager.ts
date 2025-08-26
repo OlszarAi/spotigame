@@ -119,6 +119,11 @@ export class LobbyManager {
       return null
     }
 
+    // Check if there are at least 2 players
+    if (lobby.players.length < 2) {
+      return null
+    }
+
     lobby.status = 'fetching-tracks'
     this.lobbies.set(lobbyId, lobby)
     return lobby
