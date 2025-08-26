@@ -83,12 +83,16 @@ const handler = NextAuth({
       return refreshAccessToken(token)
     },
     async session({ session, token }) {
-      // @ts-ignore
-      session.accessToken = token.accessToken
-      // @ts-ignore
-      session.refreshToken = token.refreshToken
-      // @ts-ignore
-      session.error = token.error
+      if (token) {
+        // @ts-ignore
+        session.accessToken = token.accessToken
+        // @ts-ignore
+        session.refreshToken = token.refreshToken
+        // @ts-ignore
+        session.error = token.error
+        // @ts-ignore
+        session.accessTokenExpires = token.accessTokenExpires
+      }
       return session
     },
   },
