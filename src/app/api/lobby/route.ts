@@ -3,12 +3,13 @@ import { getServerSession } from 'next-auth'
 import { v4 as uuidv4 } from 'uuid'
 import { Lobby, GameSettings, User } from '@/types/game'
 import GameStore from '@/lib/gameStore'
+import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 
 const gameStore = GameStore.getInstance()
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession()
+    const session = await getServerSession(authOptions)
     
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -77,7 +78,7 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const session = await getServerSession()
+    const session = await getServerSession(authOptions)
     
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

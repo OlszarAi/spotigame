@@ -1,29 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { SpotifyService } from '@/lib/spotify'
+import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession() as any
+    console.log('🔍 Debug API called');
     
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-    }
+    const session = await getServerSession(authOptions) as any
+    console.log('📝 Session exists:', !!session);
+    console.log('📝 Session details:', {
+      user: session?.user ? { name: session.user.name, email: session.user.email } : null,
+      expires: session?.expires,
+      accessToken: !!session?.accessToken,
+      error: session?.error
+    });
 
     const { playlistUrl } = await request.json()
-    
+    console.log('🎵 Testing playlist URL:', playlistUrl);
+
+    if (!session?.user) {
+      return NextResponse.json({
+        session: null,
+        playlistUrl,
+        timestamp: new Date().toISOString(),
+        error: 'No session found - user not authenticated'
+      })
+    }
+
     const debugInfo: any = {
       session: {
         user: session.user,
         hasAccessToken: !!session.accessToken,
         accessTokenLength: session.accessToken?.length,
-        error: session.error
+        error: session.error,
+        expires: session.expires
       },
       playlistUrl,
       timestamp: new Date().toISOString()
     }
 
     if (!session.accessToken) {
+      console.log('❌ No access token in session');
       return NextResponse.json({
         ...debugInfo,
         error: 'No access token in session'
@@ -31,6 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      console.log('🔑 Access token available, testing playlist access...');
       const spotifyService = new SpotifyService(session.accessToken)
       
       // Test user profile access
@@ -64,9 +83,12 @@ export async function POST(request: NextRequest) {
         }))
       }
 
+      console.log('✅ All tests passed');
       return NextResponse.json(debugInfo)
       
     } catch (spotifyError: any) {
+      console.error('❌ Spotify API error:', spotifyError);
+      
       return NextResponse.json({
         ...debugInfo,
         spotifyError: {
@@ -78,6 +100,7 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error: any) {
+    console.error('💥 Debug API error:', error);
     return NextResponse.json({
       error: error.message,
       stack: error.stack

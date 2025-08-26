@@ -3,12 +3,13 @@ import { getServerSession } from 'next-auth'
 import { SpotifyService } from '@/lib/spotify'
 import GameStore from '@/lib/gameStore'
 import { GameRound } from '@/types/game'
+import { authOptions } from '@/app/api/auth/[...nextauth]/route'
 
 const gameStore = GameStore.getInstance()
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession()
+    const session = await getServerSession(authOptions)
     
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
     switch (action) {
       case 'load-playlist':
         // Get session with access token
-        const sessionWithToken = await getServerSession() as any
+        const sessionWithToken = await getServerSession(authOptions) as any
         
         if (!sessionWithToken?.accessToken) {
           return NextResponse.json({ 
