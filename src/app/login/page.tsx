@@ -1,18 +1,39 @@
 'use client'
 
 import { signIn, useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
 export default function LoginPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (session) {
       router.push('/')
     }
-  }, [session, router])
+    
+    // Check for OAuth errors in URL
+    const errorParam = searchParams.get('error')
+    if (errorParam) {
+      setError(getErrorMessage(errorParam))
+    }
+  }, [session, router, searchParams])
+
+  const getErrorMessage = (error: string) => {
+    switch (error) {
+      case 'OAuthCallback':
+        return 'There was a problem connecting to Spotify. Please check your internet connection and try again.'
+      case 'AccessDenied':
+        return 'Access was denied. Please allow access to continue.'
+      case 'Configuration':
+        return 'Configuration error. Please contact support.'
+      default:
+        return 'An error occurred during authentication. Please try again.'
+    }
+  }
 
   if (status === 'loading') {
     return (
@@ -45,6 +66,12 @@ export default function LoginPage() {
             </p>
             
             <div className="space-y-4">
+              {error && (
+                <div className="bg-red-500 bg-opacity-20 border border-red-500 rounded-lg p-4 text-red-200">
+                  <p className="text-sm">{error}</p>
+                </div>
+              )}
+              
               <div className="text-left text-sm text-gray-300 space-y-2">
                 <h3 className="text-white font-medium">How it works:</h3>
                 <ul className="space-y-1 ml-4">

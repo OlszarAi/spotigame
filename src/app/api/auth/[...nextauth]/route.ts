@@ -1,6 +1,14 @@
 import NextAuth from "next-auth"
 import SpotifyProvider from "next-auth/providers/spotify"
 
+// Debug environment variables
+console.log('NextAuth Config:', {
+  NEXTAUTH_URL: process.env.NEXTAUTH_URL,
+  SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID ? 'Set' : 'Missing',
+  SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET ? 'Set' : 'Missing',
+  NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ? 'Set' : 'Missing',
+})
+
 const handler = NextAuth({
   providers: [
     SpotifyProvider({
@@ -35,7 +43,14 @@ const handler = NextAuth({
   },
   pages: {
     signIn: '/login',
+    error: '/login', // Redirect errors to login page
   },
+  events: {
+    async signIn({ user, account, profile }) {
+      console.log('SignIn event:', { user: user?.email, account: account?.provider })
+    },
+  },
+  debug: true, // Enable debug for production to see errors
 })
 
 export { handler as GET, handler as POST }
