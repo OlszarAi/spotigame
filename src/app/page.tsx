@@ -90,9 +90,9 @@ export default function Home() {
             <div className="space-y-6">
               {/* Game Info */}
               <div className="bg-gradient-to-r from-green-600 to-blue-600 rounded-lg p-6">
-                <h3 className="text-xl font-bold text-white mb-2">🎵 Top Tracks Battle!</h3>
+                <h3 className="text-xl font-bold text-white mb-2">🎵 Single Player Demo!</h3>
                 <p className="text-white opacity-90">
-                  Play music from everyone's top tracks and guess whose favorite song it is!
+                  Currently in demo mode - uses only your top tracks from last 4 weeks. You'll guess which of YOUR songs is playing!
                 </p>
               </div>
 
@@ -174,15 +174,15 @@ export default function Home() {
           <div className="mt-8 bg-gray-800 rounded-lg p-6">
             <h3 className="text-xl font-semibold text-white mb-4">How to Play:</h3>
             <ol className="list-decimal list-inside space-y-2 text-gray-300">
-              <li>Create a lobby and invite friends (everyone needs Spotify)</li>
-              <li>When game starts, we'll gather everyone's top tracks from last 4 weeks</li>
-              <li>Listen to song previews and guess whose favorite song it is</li>
-              <li>Score points for correct guesses - highest score wins!</li>
+              <li>Create a demo lobby (single player mode)</li>
+              <li>Game will collect your top tracks from last 4 weeks</li>
+              <li>Listen to song previews and try to recognize your own music!</li>
+              <li>Great way to discover what you've been listening to lately!</li>
             </ol>
             <div className="mt-4 bg-blue-900 rounded-lg p-4">
               <p className="text-blue-200 text-sm">
-                <strong>🎯 New Game Mode:</strong> Instead of playlists, we use your real Spotify listening data! 
-                The game will automatically collect top tracks from each player's recent listening history.
+                <strong>🚧 Demo Version:</strong> Currently single-player only using your own Spotify top tracks. 
+                Multi-player support coming soon where you'll guess whose tracks belong to whom!
               </p>
             </div>
           </div>

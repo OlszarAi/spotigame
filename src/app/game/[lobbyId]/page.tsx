@@ -33,6 +33,7 @@ export default function GamePage({ params }: GamePageProps) {
   const [selectedGuess, setSelectedGuess] = useState('')
   const [showResults, setShowResults] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isStartingGame, setIsStartingGame] = useState(false)
   const audioRef = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
@@ -98,11 +99,33 @@ export default function GamePage({ params }: GamePageProps) {
   }
 
   const handleStartGame = async () => {
+    if (isStartingGame) return
+    
+    setIsStartingGame(true)
     try {
       console.log('🎮 Starting game and collecting top tracks...')
-      await startGame()
+      const result = await startGame()
+      
+      // Show success message with details
+      if (result?.note) {
+        alert(`Game started successfully!\n\n${result.note}\n\nTracks collected: ${result.trackCount}`)
+      }
     } catch (error: any) {
-      alert(error.message || 'Failed to start game')
+      console.error('Start game error:', error)
+      
+      // Better error messages
+      let errorMessage = 'Failed to start game'
+      if (error.message?.includes('No top tracks found')) {
+        errorMessage = '🎵 No recent listening history found!\n\nMake sure you\'ve been listening to music on Spotify in the last 4 weeks.'
+      } else if (error.message?.includes('authentication')) {
+        errorMessage = '🔐 Spotify authentication expired.\n\nPlease sign out and sign in again.'
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      alert(errorMessage)
+    } finally {
+      setIsStartingGame(false)
     }
   }
 
@@ -197,10 +220,11 @@ export default function GamePage({ params }: GamePageProps) {
 
               {/* Game Info */}
               <div className="mb-6 bg-gradient-to-r from-green-600 to-blue-600 rounded-lg p-4">
-                <h4 className="text-white font-bold mb-2">🎵 How This Works</h4>
+                <h4 className="text-white font-bold mb-2">🎵 Demo Mode - Single Player</h4>
                 <p className="text-white text-sm opacity-90">
-                  When the game starts, we'll collect top tracks from the last 4 weeks from each player's Spotify. 
-                  Then you'll guess whose favorite song is playing!
+                  Currently using only the lobby owner's top tracks from the last 4 weeks. 
+                  You'll be guessing which of YOUR songs is playing! 
+                  Multi-player support (collecting tracks from all players) coming soon.
                 </p>
               </div>
 
@@ -209,9 +233,10 @@ export default function GamePage({ params }: GamePageProps) {
                 <div className="space-y-4">
                   <button
                     onClick={handleStartGame}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                    disabled={isStartingGame}
+                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg transition-colors"
                   >
-                    🚀 Start Game & Collect Top Tracks
+                    {isStartingGame ? '🔄 Collecting Your Top Tracks...' : '🚀 Start Demo Game (Your Top Tracks)'}
                   </button>
                 </div>
               )}

@@ -42,33 +42,45 @@ export async function POST(request: NextRequest) {
           }, { status: 401 })
         }
 
-        console.log('🎮 Starting game - collecting top tracks from all players')
+        console.log('🎮 Starting game - collecting top tracks from owner (single player demo)')
         
         try {
-          // Collect user tokens - for now we only have owner's token
-          // In a real implementation, you'd need to collect tokens from all players
-          const userTokens = [{
-            userId: session.user.email!,
-            userName: session.user.name!,
-            accessToken: sessionWithToken.accessToken
-          }]
-          
-          // TODO: Add logic to collect access tokens from all players
-          // For now, we'll use owner's tracks for demonstration
-          
           const spotifyService = new SpotifyService(sessionWithToken.accessToken)
-          const tracks = await spotifyService.createGameTracksPool(userTokens, lobby.settings.tracksPerUser)
           
-          if (tracks.length === 0) {
+          // For now, just use owner's tracks (single player demo)
+          // TODO: Implement multi-player token collection system
+          console.log('📝 Getting top tracks for owner:', session.user.email)
+          const ownerTracks = await spotifyService.getTopTracks(session.user.email!, lobby.settings.tracksPerUser)
+          
+          if (ownerTracks.length === 0) {
             return NextResponse.json({ 
-              error: 'No playable top tracks found. Make sure players have recent listening history.' 
+              error: 'No top tracks found. Make sure you have recent listening history on Spotify.' 
             }, { status: 400 })
           }
 
-          console.log(`✅ Successfully collected ${tracks.length} tracks from ${userTokens.length} players`)
+          // Add owner's name to tracks
+          const tracksWithUserInfo = ownerTracks.map(track => ({
+            ...track,
+            user_name: session.user.name || 'Unknown User'
+          }))
+
+          console.log(`✅ Successfully collected ${tracksWithUserInfo.length} tracks from owner`)
+          
+          // For single player demo, duplicate some tracks to have enough for game
+          let gameTrackPool = [...tracksWithUserInfo]
+          if (gameTrackPool.length < lobby.settings.numberOfRounds) {
+            // Duplicate tracks if we don't have enough
+            while (gameTrackPool.length < lobby.settings.numberOfRounds) {
+              gameTrackPool = [...gameTrackPool, ...tracksWithUserInfo]
+            }
+          }
+          
+          // Shuffle and take only what we need
+          const shuffledTracks = gameTrackPool.sort(() => 0.5 - Math.random())
+          const finalTracks = shuffledTracks.slice(0, lobby.settings.numberOfRounds)
           
           // Update lobby with tracks
-          gameStore.updateLobby(lobbyId, { tracks })
+          gameStore.updateLobby(lobbyId, { tracks: finalTracks })
 
           // Initialize player scores
           const playerIds = lobby.players.map(p => p.id)
@@ -81,8 +93,9 @@ export async function POST(request: NextRequest) {
           })
 
           return NextResponse.json({ 
-            message: 'Game started with top tracks',
-            trackCount: tracks.length 
+            message: 'Game started with owner\'s top tracks (single player demo)',
+            trackCount: finalTracks.length,
+            note: 'Currently using owner\'s tracks only. Multi-player support coming soon!'
           })
         } catch (error: any) {
           console.error('Error collecting top tracks:', error)
