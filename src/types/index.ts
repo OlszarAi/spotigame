@@ -69,21 +69,3 @@ export interface PlayerScore {
   correctGuesses: number
   totalRounds: number
 }
-
-export interface SocketEvents {
-  // Client to server
-  'join-lobby': { lobbyId: string; userId: string }
-  'leave-lobby': { lobbyId: string; userId: string }
-  'update-lobby-settings': { lobbyId: string; settings: LobbySettings }
-  'start-game': { lobbyId: string }
-  'submit-guess': { lobbyId: string; guessedUserId: string }
-  'ready-for-next-round': { lobbyId: string }
-
-  // Server to client
-  'lobby-updated': Lobby
-  'game-started': { lobbyId: string }
-  'round-started': { track: Track; roundEndTime: Date }
-  'round-ended': { results: RoundResult[]; nextRoundStartTime?: Date }
-  'game-finished': { finalResults: PlayerScore[] }
-  'error': { message: string }
-}

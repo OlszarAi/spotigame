@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Lobby, LobbySettings } from '@/types'
 
 interface Props {
@@ -29,6 +29,59 @@ export default function LobbyPage({ params }: Props) {
     })
   }, [params])
 
+  const fetchLobby = useCallback(async () => {
+    if (!lobbyId) return
+    
+    try {
+      const response = await fetch(`/api/lobby?id=${lobbyId}`)
+      if (!response.ok) {
+        throw new Error('Lobby not found')
+      }
+      const { lobby } = await response.json()
+      setLobby(lobby)
+      setIsLoading(false)
+    } catch (error) {
+      setError('Failed to load lobby')
+      setIsLoading(false)
+    }
+  }, [lobbyId])
+
+  const joinLobbyAPI = useCallback(async () => {
+    if (!lobbyId || !session?.user) return
+    
+    try {
+      const response = await fetch('/api/lobby/join', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lobbyId }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to join lobby')
+      }
+    } catch (error) {
+      console.error('Error joining lobby:', error)
+    }
+  }, [lobbyId, session?.user])
+
+  const leaveLobbyAPI = useCallback(async () => {
+    if (!lobbyId || !session?.user) return
+    
+    try {
+      await fetch('/api/lobby/leave', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lobbyId }),
+      })
+    } catch (error) {
+      console.error('Error leaving lobby:', error)
+    }
+  }, [lobbyId, session?.user])
+
   useEffect(() => {
     if (status === 'loading' || !lobbyId) return
     
@@ -53,60 +106,7 @@ export default function LobbyPage({ params }: Props) {
       leaveLobbyAPI()
       clearInterval(pollInterval)
     }
-  }, [session, status, lobbyId, router])
-
-  const fetchLobby = async () => {
-    if (!lobbyId) return
-    
-    try {
-      const response = await fetch(`/api/lobby?id=${lobbyId}`)
-      if (!response.ok) {
-        throw new Error('Lobby not found')
-      }
-      const { lobby } = await response.json()
-      setLobby(lobby)
-      setIsLoading(false)
-    } catch (error) {
-      setError('Failed to load lobby')
-      setIsLoading(false)
-    }
-  }
-
-  const joinLobbyAPI = async () => {
-    if (!lobbyId || !session?.user) return
-    
-    try {
-      const response = await fetch('/api/lobby/join', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ lobbyId }),
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to join lobby')
-      }
-    } catch (error) {
-      console.error('Error joining lobby:', error)
-    }
-  }
-
-  const leaveLobbyAPI = async () => {
-    if (!lobbyId || !session?.user) return
-    
-    try {
-      await fetch('/api/lobby/leave', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ lobbyId }),
-      })
-    } catch (error) {
-      console.error('Error leaving lobby:', error)
-    }
-  }
+  }, [session, status, lobbyId, router, joinLobbyAPI, leaveLobbyAPI, fetchLobby])
 
   const fetchTopTracks = async () => {
     if (!lobbyId) return
