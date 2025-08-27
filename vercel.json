@@ -1,4 +1,27 @@
 {
-  "version": 2,
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "outputDirectory": ".next",
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    }
+  ],
+  "env": {
+    "NEXTAUTH_URL": "@nextauth_url",
+    "NEXTAUTH_SECRET": "@nextauth_secret",
+    "SPOTIFY_CLIENT_ID": "@spotify_client_id",
+    "SPOTIFY_CLIENT_SECRET": "@spotify_client_secret",
+    "NEXT_PUBLIC_SUPABASE_URL": "@next_public_supabase_url",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@next_public_supabase_anon_key",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key"
+  }
 }

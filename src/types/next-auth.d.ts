@@ -1,26 +1,26 @@
-import { DefaultSession, DefaultUser } from "next-auth"
-import { JWT, DefaultJWT } from "next-auth/jwt"
-
-declare module "next-auth" {
+declare module 'next-auth' {
   interface Session {
-    user: {
-      accessToken: string
-      refreshToken: string
-      spotifyId: string
-    } & DefaultSession["user"]
-  }
-
-  interface User extends DefaultUser {
     accessToken?: string
     refreshToken?: string
-    spotifyId?: string
+    expiresAt?: number
+    user: {
+      id: string
+      name?: string | null
+      email?: string | null
+      image?: string | null
+    }
+  }
+
+  interface User {
+    id: string
   }
 }
 
-declare module "next-auth/jwt" {
-  interface JWT extends DefaultJWT {
+declare module 'next-auth/jwt' {
+  interface JWT {
     accessToken?: string
     refreshToken?: string
-    spotifyId?: string
+    expiresAt?: number
+    sub: string
   }
 }

@@ -1,157 +1,157 @@
 'use client'
 
 import { useSession } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
-import { Lobby, LobbySettings } from '@/types'
+import Image from 'next/image'
+import { 
+  Users, 
+  Settings, 
+  Copy, 
+  Play, 
+  Crown, 
+  UserCheck, 
+  Clock,
+  Music,
+  Eye,
+  EyeOff
+} from 'lucide-react'
+import { LobbyWithPlayers, LobbySettings } from '@/types/database'
+import { supabase } from '@/lib/supabase'
 
-interface Props {
-  params: Promise<{ id: string }>
-}
-
-export default function LobbyPage({ params }: Props) {
-  const { data: session, status } = useSession()
+export default function LobbyPage() {
+  const { data: session } = useSession()
   const router = useRouter()
-  const [lobby, setLobby] = useState<Lobby | null>(null)
+  const params = useParams()
+  const lobbyId = params.id as string
+
+  const [lobby, setLobby] = useState<LobbyWithPlayers | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isFetchingTracks, setIsFetchingTracks] = useState(false)
-  const [tracksFetched, setTracksFetched] = useState(false)
-  const [error, setError] = useState('')
-  const [lobbyId, setLobbyId] = useState<string | null>(null)
-
-  const isCreator = lobby && session?.user && lobby.creatorId === session.user.spotifyId
-  const currentPlayer = lobby && session?.user ? lobby.players.find(p => p.id === session.user.spotifyId) : null
-
-  // Resolve params
-  useEffect(() => {
-    params.then(resolvedParams => {
-      setLobbyId(resolvedParams.id)
-    })
-  }, [params])
+  const [isJoining, setIsJoining] = useState(false)
+  const [isStarting, setIsStarting] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [settings, setSettings] = useState<LobbySettings | null>(null)
+  const [isReady, setIsReady] = useState(false)
 
   const fetchLobby = useCallback(async () => {
-    if (!lobbyId) return
-    
     try {
-      const response = await fetch(`/api/lobby?id=${lobbyId}`)
-      if (!response.ok) {
-        throw new Error('Lobby not found')
+      const response = await fetch(`/api/lobbies/${lobbyId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setLobby(data.lobby)
+        setSettings(data.lobby.settings)
+        
+        // Check if current user is in lobby and ready
+        const userId = session?.user ? (session.user as { id: string }).id : null
+        const currentPlayer = data.lobby.players?.find(
+          (p: { user_id: string; is_ready: boolean }) => p.user_id === userId
+        )
+        setIsReady(currentPlayer?.is_ready || false)
+      } else if (response.status === 404) {
+        router.push('/')
       }
-      const { lobby } = await response.json()
-      setLobby(lobby)
-      setIsLoading(false)
     } catch (error) {
-      setError('Failed to load lobby')
+      console.error('Error fetching lobby:', error)
+    } finally {
       setIsLoading(false)
     }
-  }, [lobbyId])
+  }, [lobbyId, session?.user, router])
 
-  const joinLobbyAPI = useCallback(async () => {
-    if (!lobbyId || !session?.user) return
-    
-    try {
-      const response = await fetch('/api/lobby/join', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+  const setupRealtimeSubscription = useCallback(() => {
+    const channel = supabase
+      .channel(`lobby-${lobbyId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lobbies',
+          filter: `id=eq.${lobbyId}`
         },
-        body: JSON.stringify({ lobbyId }),
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error('Failed to join lobby:', errorData.error)
-        return
-      }
-      
-      console.log('Successfully joined lobby')
-    } catch (error) {
-      console.error('Error joining lobby:', error)
-    }
-  }, [lobbyId, session?.user])
+        () => {
+          fetchLobby()
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lobby_players',
+          filter: `lobby_id=eq.${lobbyId}`
+        },
+        () => {
+          fetchLobby()
+        }
+      )
+      .subscribe()
 
-  const leaveLobbyAPI = useCallback(async () => {
-    if (!lobbyId || !session?.user) return
-    
-    try {
-      await fetch('/api/lobby/leave', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ lobbyId }),
-      })
-    } catch (error) {
-      console.error('Error leaving lobby:', error)
+    return () => {
+      supabase.removeChannel(channel)
     }
-  }, [lobbyId, session?.user])
+  }, [lobbyId, fetchLobby])
 
   useEffect(() => {
-    if (status === 'loading' || !lobbyId) return
-    
-    if (!session) {
+    if (!(session?.user as { id: string })?.id) {
       router.push('/login')
       return
     }
 
-    // Join the lobby via API
-    joinLobbyAPI()
-
-    // Set up polling for lobby updates
-    const pollInterval = setInterval(() => {
-      fetchLobby()
-    }, 2000) // Poll every 2 seconds
-
-    // Fetch initial lobby data
     fetchLobby()
+    setupRealtimeSubscription()
+  }, [session, lobbyId, router, fetchLobby, setupRealtimeSubscription])
 
-    return () => {
-      // Only leave lobby when actually navigating away, not on re-renders
-      // Don't leave lobby on unmount to prevent accidental deletion
-      clearInterval(pollInterval)
-    }
-  }, [session, status, lobbyId, router, joinLobbyAPI, leaveLobbyAPI, fetchLobby])
-
-  const fetchTopTracks = async () => {
-    if (!lobbyId) return
+  const joinLobby = async () => {
+    if (!(session?.user as { id: string })?.id) return
     
-    setIsFetchingTracks(true)
+    setIsJoining(true)
     try {
-      const response = await fetch('/api/spotify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ lobbyId: lobbyId }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch tracks')
-      }
-
-      setTracksFetched(true)
-    } catch (error) {
-      setError('Failed to fetch your Spotify tracks')
-    } finally {
-      setIsFetchingTracks(false)
-    }
-  }
-
-  const updateSettings = async (settings: LobbySettings) => {
-    if (!isCreator || !lobbyId) return
-    
-    try {
-      const response = await fetch('/api/lobby/settings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ lobbyId, settings }),
+      const response = await fetch(`/api/lobbies/${lobbyId}`, {
+        method: 'POST'
       })
       
       if (response.ok) {
-        // Refresh lobby data
-        fetchLobby()
+        await fetchLobby()
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Failed to join lobby')
+      }
+    } catch (error) {
+      console.error('Error joining lobby:', error)
+      alert('Failed to join lobby')
+    } finally {
+      setIsJoining(false)
+    }
+  }
+
+  const toggleReady = async () => {
+    if (!(session?.user as { id: string })?.id) return
+    
+    try {
+      // This would need a separate API endpoint to update player ready status
+      // For now, we'll simulate it
+      setIsReady(!isReady)
+    } catch (error) {
+      console.error('Error toggling ready:', error)
+    }
+  }
+
+  const updateSettings = async (newSettings: LobbySettings) => {
+    if (!(session?.user as { id: string })?.id || lobby?.creator_id !== (session?.user as { id: string })?.id) return
+    
+    try {
+      const response = await fetch(`/api/lobbies/${lobbyId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ settings: newSettings })
+      })
+      
+      if (response.ok) {
+        setSettings(newSettings)
+        setShowSettings(false)
+        await fetchLobby()
       }
     } catch (error) {
       console.error('Error updating settings:', error)
@@ -159,58 +159,48 @@ export default function LobbyPage({ params }: Props) {
   }
 
   const startGame = async () => {
-    if (!isCreator || !lobbyId) return
+    if (!(session?.user as { id: string })?.id) return
     
+    setIsStarting(true)
     try {
-      const response = await fetch('/api/lobby/start', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ lobbyId }),
+      const response = await fetch(`/api/lobbies/${lobbyId}/start`, {
+        method: 'POST'
       })
       
       if (response.ok) {
-        const { redirectUrl } = await response.json()
-        if (redirectUrl) {
-          router.push(redirectUrl)
-        }
+        router.push(`/game/${lobbyId}`)
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Failed to start game')
       }
     } catch (error) {
       console.error('Error starting game:', error)
+      alert('Failed to start game')
+    } finally {
+      setIsStarting(false)
     }
   }
 
-  const copyLobbyLink = () => {
-    if (!lobbyId) return
-    
+  const copyLobbyLink = async () => {
     const link = `${window.location.origin}/lobby/${lobbyId}`
-    navigator.clipboard.writeText(link)
-    alert('Lobby link copied to clipboard!')
+    try {
+      await navigator.clipboard.writeText(link)
+      // You could show a toast here
+    } catch (error) {
+      console.error('Failed to copy link:', error)
+    }
   }
 
-  if (status === 'loading' || isLoading) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
+      <div className="min-h-screen bg-spotify-black flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1db954] mx-auto mb-4"></div>
-          <div className="text-white text-xl">Loading lobby...</div>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
-        <div className="text-center bg-[#181818] p-8 rounded-lg border border-[#404040]">
-          <div className="text-red-400 text-xl mb-4">{error}</div>
-          <button
-            onClick={() => router.push('/')}
-            className="bg-[#1db954] hover:bg-[#1ed760] text-black font-bold py-2 px-6 rounded-full transition-colors"
-          >
-            Back to Home
-          </button>
+          <div className="loading-dots text-spotify-green text-2xl mb-4">
+            <span>●</span>
+            <span>●</span>
+            <span>●</span>
+          </div>
+          <p className="text-spotify-light-gray">Loading lobby...</p>
         </div>
       </div>
     )
@@ -218,229 +208,282 @@ export default function LobbyPage({ params }: Props) {
 
   if (!lobby) {
     return (
-      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
-        <div className="text-center bg-[#181818] p-8 rounded-lg border border-[#404040]">
-          <div className="text-white text-xl mb-4">Lobby not found</div>
-          <button
+      <div className="min-h-screen bg-spotify-black flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-spotify-light-gray">Lobby not found</p>
+          <button 
             onClick={() => router.push('/')}
-            className="bg-[#1db954] hover:bg-[#1ed760] text-black font-bold py-2 px-6 rounded-full transition-colors"
+            className="mt-4 spotify-button"
           >
-            Back to Home
+            Go Home
           </button>
         </div>
       </div>
     )
   }
 
-  if (lobby.status === 'playing') {
-    router.push(`/game/${lobbyId}`)
-    return null
-  }
+  const isCreator = lobby.creator_id === (session?.user as { id: string })?.id
+  const currentPlayer = lobby.players?.find(p => p.user_id === (session?.user as { id: string })?.id)
+  const isInLobby = !!currentPlayer
+  const allPlayersReady = lobby.players?.every(p => p.is_ready) || false
+  const canStart = isCreator && lobby.players && lobby.players.length >= 2 && allPlayersReady
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-white mb-2">
-            🎵 Game Lobby
-          </h1>
-          <p className="text-[#1db954] text-lg font-medium">
-            Lobby ID: {lobby.id}
-          </p>
-          <button
-            onClick={copyLobbyLink}
-            className="mt-2 text-[#1db954] hover:text-[#1ed760] underline text-sm transition-colors"
-          >
-            Copy lobby link
-          </button>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Settings Panel */}
-          <div className="bg-[#181818] rounded-lg p-6 border border-[#404040]">
-            <h2 className="text-xl font-semibold text-white mb-4">Game Settings</h2>
-            
-            {isCreator && lobby.status === 'waiting' ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-[#b3b3b3] mb-2">
-                    Number of Rounds
-                  </label>
-                  <select
-                    value={lobby.settings.numberOfRounds}
-                    onChange={(e) => updateSettings({ ...lobby.settings, numberOfRounds: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 bg-[#121212] border border-[#404040] rounded-md text-white focus:outline-none focus:border-[#1db954] focus:ring-1 focus:ring-[#1db954] transition-colors"
-                  >
-                    {[5, 10, 15, 20].map(num => (
-                      <option key={num} value={num} className="bg-[#121212]">{num} rounds</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-[#b3b3b3] mb-2">
-                    Song Duration (seconds)
-                  </label>
-                  <select
-                    value={lobby.settings.listeningDuration}
-                    onChange={(e) => updateSettings({ ...lobby.settings, listeningDuration: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 bg-[#121212] border border-[#404040] rounded-md text-white focus:outline-none focus:border-[#1db954] focus:ring-1 focus:ring-[#1db954] transition-colors"
-                  >
-                    {[15, 30, 45, 60].map(num => (
-                      <option key={num} value={num} className="bg-[#121212]">{num} seconds</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="showTrackInfo"
-                    checked={lobby.settings.showTrackInfo}
-                    onChange={(e) => updateSettings({ ...lobby.settings, showTrackInfo: e.target.checked })}
-                    className="mr-3 w-4 h-4 accent-[#1db954] bg-[#121212] border-[#404040] rounded focus:ring-[#1db954]"
-                  />
-                  <label htmlFor="showTrackInfo" className="text-sm text-[#b3b3b3]">
-                    Show track title and artist during game
-                  </label>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3 text-[#b3b3b3]">
-                <div className="flex justify-between">
-                  <span>Rounds:</span>
-                  <span className="text-white">{lobby.settings.numberOfRounds}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Song Duration:</span>
-                  <span className="text-white">{lobby.settings.listeningDuration} seconds</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Show Track Info:</span>
-                  <span className="text-white">{lobby.settings.showTrackInfo ? 'Yes' : 'No'}</span>
-                </div>
-              </div>
-            )}
+    <div className="min-h-screen bg-gradient-to-br from-spotify-black via-spotify-dark-gray to-spotify-black">
+      {/* Header */}
+      <header className="border-b border-spotify-gray bg-spotify-dark-gray/50 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <button 
+              onClick={() => router.push('/')}
+              className="text-spotify-light-gray hover:text-spotify-white transition-colors"
+            >
+              ←
+            </button>
+            <div className="bg-spotify-green p-2 rounded-full">
+              <Music className="w-6 h-6 text-spotify-black" />
+            </div>
+            <h1 className="text-2xl font-bold text-spotify-white">{lobby.name}</h1>
           </div>
+          
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={copyLobbyLink}
+              className="flex items-center space-x-1 text-spotify-light-gray hover:text-spotify-white transition-colors"
+            >
+              <Copy className="w-4 h-4" />
+              <span className="text-sm">Share</span>
+            </button>
+          </div>
+        </div>
+      </header>
 
-          {/* Players Panel */}
-          <div className="bg-[#181818] rounded-lg p-6 border border-[#404040]">
-            <h2 className="text-xl font-semibold text-white mb-4">
-              Players ({lobby.players.length})
-            </h2>
-            
-            <div className="space-y-3">
-              {lobby.players.map((player) => (
-                <div
-                  key={player.id}
-                  className="flex items-center space-x-3 p-3 bg-[#282828] rounded-lg hover:bg-[#3e3e3e] transition-colors"
-                >
-                  {player.image ? (
-                    <img
-                      src={player.image}
-                      alt={player.name}
-                      className="w-12 h-12 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-[#404040] flex items-center justify-center">
-                      <span className="text-white text-lg font-bold">
-                        {player.name.charAt(0).toUpperCase()}
-                      </span>
+      <main className="max-w-4xl mx-auto px-4 py-8">
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Players Section */}
+          <div className="lg:col-span-2">
+            <div className="bg-spotify-dark-gray rounded-lg p-6 border border-spotify-gray">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-spotify-white flex items-center">
+                  <Users className="w-5 h-5 mr-2" />
+                  Players ({lobby.players?.length || 0}/{lobby.max_players})
+                </h2>
+                
+                {!isInLobby && (
+                  <button
+                    onClick={joinLobby}
+                    disabled={isJoining}
+                    className="spotify-button-secondary text-sm"
+                  >
+                    {isJoining ? 'Joining...' : 'Join Lobby'}
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                {lobby.players?.map((player) => (
+                  <div 
+                    key={player.id}
+                    className="flex items-center justify-between bg-spotify-black rounded-lg p-3 border border-spotify-gray"
+                  >
+                    <div className="flex items-center space-x-3">
+                      {player.avatar_url && (
+                        <Image
+                          src={player.avatar_url}
+                          alt={player.username}
+                          width={40}
+                          height={40}
+                          className="w-10 h-10 rounded-full"
+                        />
+                      )}
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-spotify-white font-medium">
+                            {player.username}
+                          </span>
+                          {player.user_id === lobby.creator_id && (
+                            <Crown className="w-4 h-4 text-spotify-green" />
+                          )}
+                        </div>
+                        <span className="text-xs text-spotify-light-gray">
+                          Joined {new Date(player.joined_at).toLocaleTimeString()}
+                        </span>
+                      </div>
                     </div>
-                  )}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-white font-medium">
-                        {player.name}
-                      </p>
-                      {player.id === lobby.creatorId && (
-                        <span className="text-xs bg-[#1db954] text-black px-2 py-1 rounded font-bold">
-                          Creator
+                    
+                    <div className="flex items-center space-x-2">
+                      {player.is_ready ? (
+                        <span className="flex items-center text-spotify-green text-sm">
+                          <UserCheck className="w-4 h-4 mr-1" />
+                          Ready
+                        </span>
+                      ) : (
+                        <span className="flex items-center text-spotify-light-gray text-sm">
+                          <Clock className="w-4 h-4 mr-1" />
+                          Waiting
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-[#b3b3b3]">
-                      {lobby.status === 'fetching-tracks' ? (
-                        player.isReady ? (
-                          <span className="text-[#1db954] flex items-center gap-1">
-                            <span>✓</span> Ready
-                          </span>
-                        ) : (
-                          <span className="text-yellow-400">Fetching tracks...</span>
-                        )
-                      ) : (
-                        'Waiting to start'
-                      )}
-                    </p>
                   </div>
+                ))}
+              </div>
+
+              {isInLobby && (
+                <div className="mt-4 pt-4 border-t border-spotify-gray">
+                  <button
+                    onClick={toggleReady}
+                    className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 ${
+                      isReady
+                        ? 'bg-spotify-green text-spotify-black hover:bg-spotify-dark-green'
+                        : 'border border-spotify-green text-spotify-green hover:bg-spotify-green hover:text-spotify-black'
+                    }`}
+                  >
+                    {isReady ? 'Ready!' : 'Mark as Ready'}
+                  </button>
                 </div>
-              ))}
+              )}
             </div>
           </div>
-        </div>
 
-        {/* Game Status */}
-        <div className="bg-[#181818] rounded-lg p-6 text-center border border-[#404040]">
-          {lobby.status === 'waiting' && (
-            <>
-              <p className="text-[#b3b3b3] mb-4">
-                Waiting for players to join. Share the lobby ID or link with your friends!
-              </p>
-              {isCreator && lobby.players.length >= 2 && (
-                <button
-                  onClick={startGame}
-                  className="bg-[#1db954] hover:bg-[#1ed760] text-black font-bold py-3 px-8 rounded-full text-lg transition-colors shadow-lg"
-                >
-                  Start Game
-                </button>
-              )}
-              {lobby.players.length < 2 && (
-                <p className="text-yellow-400 bg-yellow-400/10 border border-yellow-400/20 rounded-lg p-3">
-                  You need at least 2 players to start the game
-                </p>
-              )}
-            </>
-          )}
-          
-          {lobby.status === 'fetching-tracks' && (
-            <>
-              <p className="text-yellow-400 mb-4">
-                Fetching everyone&apos;s top tracks from Spotify...
-              </p>
-              {currentPlayer && !currentPlayer.isReady && !isFetchingTracks && !tracksFetched && (
-                <button
-                  onClick={fetchTopTracks}
-                  className="bg-[#1db954] hover:bg-[#1ed760] text-black font-bold py-3 px-6 rounded-full text-lg transition-colors"
-                >
-                  Fetch My Tracks
-                </button>
-              )}
-              {isFetchingTracks && (
-                <div className="text-white">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#1db954] mx-auto mb-2"></div>
-                  Fetching your top tracks...
+          {/* Settings & Game Control */}
+          <div className="space-y-6">
+            {/* Game Settings */}
+            <div className="bg-spotify-dark-gray rounded-lg p-6 border border-spotify-gray">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-spotify-white flex items-center">
+                  <Settings className="w-5 h-5 mr-2" />
+                  Settings
+                </h3>
+                {isCreator && (
+                  <button
+                    onClick={() => setShowSettings(!showSettings)}
+                    className="text-spotify-green hover:text-spotify-dark-green transition-colors"
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+
+              {showSettings && settings ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-spotify-light-gray mb-1">
+                      Number of Rounds
+                    </label>
+                    <input
+                      type="number"
+                      min="5"
+                      max="20"
+                      value={settings.rounds}
+                      onChange={(e) => setSettings({
+                        ...settings,
+                        rounds: parseInt(e.target.value)
+                      })}
+                      className="spotify-input w-full"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm text-spotify-light-gray mb-1">
+                      Snippet Duration (seconds)
+                    </label>
+                    <input
+                      type="number"
+                      min="15"
+                      max="60"
+                      value={settings.snippet_duration}
+                      onChange={(e) => setSettings({
+                        ...settings,
+                        snippet_duration: parseInt(e.target.value)
+                      })}
+                      className="spotify-input w-full"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={settings.show_track_info}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          show_track_info: e.target.checked
+                        })}
+                        className="rounded text-spotify-green"
+                      />
+                      <span className="text-sm text-spotify-light-gray">
+                        Show track title & artist
+                      </span>
+                    </label>
+                  </div>
+                  
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => updateSettings(settings)}
+                      className="spotify-button text-sm flex-1"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setShowSettings(false)}
+                      className="spotify-button-secondary text-sm flex-1"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-spotify-light-gray">Rounds:</span>
+                    <span className="text-spotify-white">{lobby.settings.rounds}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-spotify-light-gray">Duration:</span>
+                    <span className="text-spotify-white">{lobby.settings.snippet_duration}s</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-spotify-light-gray">Track Info:</span>
+                    {lobby.settings.show_track_info ? (
+                      <Eye className="w-4 h-4 text-spotify-green" />
+                    ) : (
+                      <EyeOff className="w-4 h-4 text-spotify-gray" />
+                    )}
+                  </div>
                 </div>
               )}
-              {tracksFetched && (
-                <p className="text-[#1db954] flex items-center justify-center gap-2">
-                  <span>✓</span> Your tracks have been loaded!
-                </p>
-              )}
-            </>
-          )}
-        </div>
+            </div>
 
-        {/* Back Button */}
-        <div className="text-center">
-          <button
-            onClick={() => router.push('/')}
-            className="text-[#1db954] hover:text-[#1ed760] underline transition-colors"
-          >
-            ← Back to Home
-          </button>
+            {/* Start Game */}
+            {isCreator && (
+              <div className="bg-spotify-dark-gray rounded-lg p-6 border border-spotify-gray">
+                <h3 className="text-lg font-semibold text-spotify-white mb-4">
+                  Game Control
+                </h3>
+                
+                {!canStart && (
+                  <div className="mb-4 text-sm text-spotify-light-gray">
+                    {lobby.players && lobby.players.length < 2 ? (
+                      <p>• Need at least 2 players</p>
+                    ) : !allPlayersReady ? (
+                      <p>• All players must be ready</p>
+                    ) : null}
+                  </div>
+                )}
+                
+                <button
+                  onClick={startGame}
+                  disabled={!canStart || isStarting}
+                  className="w-full spotify-button flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                >
+                  <Play className="w-5 h-5" />
+                  <span>{isStarting ? 'Starting...' : 'Start Game'}</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

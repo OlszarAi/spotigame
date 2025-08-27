@@ -1,120 +1,115 @@
 'use client'
 
-import { signIn, useSession } from 'next-auth/react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState, Suspense } from 'react'
+import { signIn, getSession } from 'next-auth/react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Music, Play, Users, Trophy } from 'lucide-react'
 
-function LoginContent() {
-  const { data: session, status } = useSession()
+export default function LoginPage() {
+  const [isLoading, setIsLoading] = useState(false)
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (session) {
-      router.push('/')
+    // Check if user is already authenticated
+    const checkAuth = async () => {
+      const session = await getSession()
+      if (session) {
+        router.push('/')
+      }
     }
-    
-    // Check for OAuth errors in URL
-    const errorParam = searchParams.get('error')
-    if (errorParam) {
-      setError(getErrorMessage(errorParam))
+    checkAuth()
+  }, [router])
+
+  const handleSpotifyLogin = async () => {
+    setIsLoading(true)
+    try {
+      await signIn('spotify', { callbackUrl: '/' })
+    } catch (error) {
+      console.error('Login error:', error)
+      setIsLoading(false)
     }
-  }, [session, router, searchParams])
-
-  const getErrorMessage = (error: string) => {
-    switch (error) {
-      case 'OAuthCallback':
-        return 'There was a problem connecting to Spotify. Please check your internet connection and try again.'
-      case 'AccessDenied':
-        return 'Access was denied. Please allow access to continue.'
-      case 'Configuration':
-        return 'Configuration error. Please contact support.'
-      default:
-        return 'An error occurred during authentication. Please try again.'
-    }
-  }
-
-  if (status === 'loading') {
-    return (
-      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1db954] mx-auto mb-4"></div>
-          <div className="text-white text-xl">Loading...</div>
-        </div>
-      </div>
-    )
-  }
-
-  if (session) {
-    return null // Will redirect
   }
 
   return (
-    <div className="min-h-screen bg-[#121212] flex items-center justify-center p-4">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <h1 className="text-6xl font-bold text-white mb-4">
-            🎵 SpotiGame
-          </h1>
-          <p className="text-[#1db954] text-xl font-medium mb-8">
-            The ultimate Spotify music guessing game
-          </p>
-          <div className="bg-[#181818] border border-[#404040] rounded-lg p-8 space-y-6">
-            <h2 className="text-2xl font-semibold text-white">
-              Ready to Play?
-            </h2>
-            <p className="text-[#b3b3b3] text-sm">
-              Connect your Spotify account to start playing with your music taste
-            </p>
-            
-            <div className="space-y-4">
-              {error && (
-                <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4 text-red-300">
-                  <p className="text-sm">{error}</p>
-                </div>
-              )}
-              
-              <div className="text-left text-sm text-[#b3b3b3] space-y-2">
-                <h3 className="text-white font-medium">How it works:</h3>
-                <ul className="space-y-1 ml-4">
-                  <li>• Create or join a game lobby</li>
-                  <li>• We&apos;ll fetch everyone&apos;s top tracks</li>
-                  <li>• Guess which player each song belongs to</li>
-                  <li>• Compete for the highest score!</li>
-                </ul>
-              </div>
-              
-              <button
-                onClick={() => signIn('spotify', { callbackUrl: '/' })}
-                className="w-full bg-[#1db954] hover:bg-[#1ed760] text-black font-bold py-4 px-6 rounded-full transition-colors flex items-center justify-center space-x-2"
-              >
-                <span className="text-2xl">🎧</span>
-                <span>Connect with Spotify</span>
-              </button>
-              
-              <p className="text-xs text-[#757575] text-center">
-                We only access your top tracks and basic profile info
-              </p>
+    <div className="min-h-screen bg-gradient-to-br from-spotify-black via-spotify-dark-gray to-spotify-black flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        {/* Logo and Title */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center mb-4">
+            <div className="bg-spotify-green p-3 rounded-full">
+              <Music className="w-8 h-8 text-spotify-black" />
             </div>
+          </div>
+          <h1 className="text-4xl font-bold text-spotify-white mb-2">
+            SpotiGame
+          </h1>
+          <p className="text-spotify-light-gray text-lg">
+            Guess who owns the track!
+          </p>
+        </div>
+
+        {/* Features */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="text-center">
+            <div className="bg-spotify-dark-gray p-3 rounded-lg mb-2">
+              <Play className="w-6 h-6 text-spotify-green mx-auto" />
+            </div>
+            <p className="text-sm text-spotify-light-gray">Music</p>
+          </div>
+          <div className="text-center">
+            <div className="bg-spotify-dark-gray p-3 rounded-lg mb-2">
+              <Users className="w-6 h-6 text-spotify-green mx-auto" />
+            </div>
+            <p className="text-sm text-spotify-light-gray">Multiplayer</p>
+          </div>
+          <div className="text-center">
+            <div className="bg-spotify-dark-gray p-3 rounded-lg mb-2">
+              <Trophy className="w-6 h-6 text-spotify-green mx-auto" />
+            </div>
+            <p className="text-sm text-spotify-light-gray">Compete</p>
+          </div>
+        </div>
+
+        {/* Login Card */}
+        <div className="bg-spotify-dark-gray rounded-lg p-6 border border-spotify-gray">
+          <h2 className="text-xl font-semibold text-spotify-white mb-4 text-center">
+            Connect with Spotify
+          </h2>
+          <p className="text-spotify-light-gray text-sm mb-6 text-center">
+            Login with your Spotify account to create lobbies and play with friends
+          </p>
+          
+          <button
+            onClick={handleSpotifyLogin}
+            disabled={isLoading}
+            className="w-full bg-spotify-green hover:bg-spotify-dark-green text-spotify-black font-semibold py-3 px-6 rounded-full transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+          >
+            {isLoading ? (
+              <div className="flex items-center justify-center">
+                <div className="loading-dots">
+                  <span>●</span>
+                  <span>●</span>
+                  <span>●</span>
+                </div>
+                <span className="ml-2">Connecting...</span>
+              </div>
+            ) : (
+              'Login with Spotify'
+            )}
+          </button>
+        </div>
+
+        {/* How it works */}
+        <div className="mt-8 text-center">
+          <h3 className="text-spotify-white font-semibold mb-4">How it works</h3>
+          <div className="space-y-2 text-sm text-spotify-light-gray">
+            <p>1. Create or join a lobby with friends</p>
+            <p>2. Listen to track snippets from everyone&apos;s top songs</p>
+            <p>3. Guess which player owns each track</p>
+            <p>4. Score points for correct guesses!</p>
           </div>
         </div>
       </div>
     </div>
-  )
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1db954] mx-auto mb-4"></div>
-          <div className="text-white text-xl">Loading...</div>
-        </div>
-      </div>
-    }>
-      <LoginContent />
-    </Suspense>
   )
 }

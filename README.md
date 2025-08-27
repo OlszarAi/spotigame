@@ -1,26 +1,37 @@
-# 🎵 SpotiGame - Spotify Music Guessing Game
+# SpotiGame 🎵
 
-A fun multiplayer game where players guess whose Spotify music is playing! Built with Next.js, Socket.io, and the Spotify Web API.
+A multiplayer web game where players guess which user owns each Spotify track. Built with Next.js 13+, Supabase, and the Spotify Web API.
 
-## 🎮 How to Play
+## Features
 
-1. **Login** with your Spotify account
-2. **Create a lobby** or **join an existing one** with a lobby ID
-3. **Configure game settings** (rounds, song duration, show track info)
-4. **Wait for players** to join and start the game
-5. **Fetch everyone's top tracks** from Spotify (last month's most played)
-6. **Listen to song snippets** and guess which player they belong to
-7. **Score points** for correct guesses and compete for the highest score!
+- **Spotify Authentication**: Login with your Spotify account
+- **Real-time Lobbies**: Create and join game lobbies with live updates
+- **Track Guessing Game**: Listen to 30-second snippets and guess the owner
+- **Multiplayer Support**: Play with friends using shareable lobby links
+- **Customizable Settings**: Configure rounds, snippet duration, and track info visibility
+- **Live Audio Playback**: Built-in audio player with controls
+- **Responsive Design**: Spotify-themed dark UI that works on all devices
 
-## 🚀 Setup Instructions
+## Tech Stack
 
-### Prerequisites
+- **Frontend**: Next.js 13+ (App Router), TypeScript, TailwindCSS
+- **Authentication**: NextAuth.js with Spotify provider
+- **Database**: Supabase (PostgreSQL with real-time subscriptions)
+- **Audio**: Web Audio API with custom player
+- **Music API**: Spotify Web API (top tracks, preview URLs)
+- **Deployment**: Vercel-ready serverless functions
 
-- Node.js 18+ installed
-- A Spotify Developer account
-- Spotify Premium account (recommended for better audio previews)
+## Prerequisites
 
-### 1. Clone the Repository
+Before setting up the project, you'll need:
+
+1. **Spotify Developer Account**: Register at [Spotify for Developers](https://developer.spotify.com)
+2. **Supabase Account**: Create a project at [Supabase](https://supabase.com)
+3. **Node.js**: Version 18+ recommended
+
+## Setup Instructions
+
+### 1. Clone and Install
 
 ```bash
 git clone <your-repo-url>
@@ -28,132 +39,140 @@ cd spotigame
 npm install
 ```
 
-### 2. Set Up Spotify API
+### 2. Spotify App Configuration
 
 1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
 2. Create a new app
-3. Add redirect URI: `http://localhost:3000/api/auth/callback/spotify`
-4. Note your Client ID and Client Secret
+3. Add these redirect URIs:
+   - `http://localhost:3000/api/auth/callback/spotify` (development)
+   - `https://your-domain.vercel.app/api/auth/callback/spotify` (production)
+4. Note down your **Client ID** and **Client Secret**
 
-### 3. Environment Configuration
+### 3. Supabase Setup
+
+1. Create a new project at [Supabase](https://supabase.com)
+2. Go to Settings → API to get your:
+   - Project URL
+   - Anon public key
+   - Service role key (keep this secret!)
+3. In the SQL Editor, run the schema from `supabase/schema.sql`
+
+### 4. Environment Variables
 
 Copy `.env.example` to `.env.local` and fill in your values:
 
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local`:
+
 ```env
+# NextAuth Configuration
 NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-random-secret-key-here
+NEXTAUTH_SECRET=your-random-secret-key
 
-# Get these from Spotify Developer Dashboard
-SPOTIFY_CLIENT_ID=your_spotify_client_id
-SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+# Spotify OAuth
+SPOTIFY_CLIENT_ID=your-spotify-client-id
+SPOTIFY_CLIENT_SECRET=your-spotify-client-secret
 
-# Optional Socket.io port
-SOCKET_PORT=3001
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 ```
 
-To generate a secure `NEXTAUTH_SECRET`:
-```bash
-openssl rand -base64 32
-```
-
-### 4. Run the Application
+### 5. Run Development Server
 
 ```bash
-# Development mode
 npm run dev
-
-# Production mode
-npm run build
-npm start
 ```
 
-Visit `http://localhost:3000` and enjoy playing!
+Open [http://localhost:3000](http://localhost:3000) to see the app.
 
-## 🏗️ Architecture
+## How to Play
 
-### Tech Stack
+1. **Login**: Authenticate with your Spotify account
+2. **Create/Join Lobby**: Create a new lobby or join via shareable link
+3. **Configure Settings**: Set number of rounds, snippet duration, etc.
+4. **Wait for Players**: All players must mark themselves as "Ready"
+5. **Start Game**: The lobby creator starts the game
+6. **Listen & Guess**: Hear track snippets and guess which player owns each song
+7. **Score Points**: Earn points for correct guesses
+8. **View Results**: See final leaderboard after all rounds
 
-- **Frontend**: Next.js 14+ with App Router, React, TypeScript
-- **Styling**: TailwindCSS
-- **Authentication**: NextAuth.js with Spotify provider
-- **Real-time Communication**: Socket.io
-- **API Integration**: Spotify Web API via spotify-web-api-node
+## Game Mechanics
 
-### Key Features
+- **Track Source**: Each player's top 100 tracks from the last month
+- **Track Pool**: All tracks are merged and randomly selected each round
+- **Preview Requirement**: Only tracks with 30-second previews are used
+- **Scoring**: 100 points per correct guess
+- **Real-time Updates**: Live lobby updates using Supabase Realtime
 
-- 🎵 **Spotify Integration**: Fetches users' top 100 tracks from the last month
-- 🔄 **Real-time Gameplay**: WebSocket-based lobby and game state management
-- 🎯 **Lobby System**: Create/join lobbies with shareable links
-- ⚙️ **Configurable Settings**: Number of rounds, song duration, track info visibility
-- 🏆 **Scoring System**: Points for correct guesses with live leaderboard
-- 📱 **Responsive Design**: Works on desktop and mobile devices
+## API Routes
 
-### Project Structure
+- `POST /api/lobbies` - Create a new lobby
+- `GET /api/lobbies` - List active lobbies
+- `GET /api/lobbies/[id]` - Get lobby details
+- `POST /api/lobbies/[id]` - Join a lobby
+- `PATCH /api/lobbies/[id]` - Update lobby settings
+- `POST /api/lobbies/[id]/start` - Start the game
+- `GET/POST /api/lobbies/[id]/round` - Manage game rounds
+- `POST /api/lobbies/[id]/guess` - Submit guesses
 
+## Deployment
+
+### Vercel Deployment
+
+1. Push your code to GitHub
+2. Connect your repo to [Vercel](https://vercel.com)
+3. Add environment variables in Vercel dashboard
+4. Update Spotify redirect URI with your Vercel domain
+5. Deploy!
+
+### Environment Variables for Production
+
+Set these in Vercel dashboard:
+
+```env
+NEXTAUTH_URL=https://your-domain.vercel.app
+NEXTAUTH_SECRET=your-production-secret
+SPOTIFY_CLIENT_ID=your-spotify-client-id
+SPOTIFY_CLIENT_SECRET=your-spotify-client-secret
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 ```
-src/
-├── app/                    # Next.js App Router pages
-│   ├── api/               # API routes
-│   │   ├── auth/          # NextAuth configuration
-│   │   ├── lobby/         # Lobby management endpoints
-│   │   └── spotify/       # Spotify API integration
-│   ├── login/             # Login page
-│   ├── lobby/[id]/        # Lobby waiting room
-│   ├── game/[id]/         # Main game interface
-│   └── layout.tsx         # Root layout with providers
-├── components/            # Reusable React components
-├── lib/                   # Utility functions and services
-│   ├── lobby-manager.ts   # In-memory lobby state management
-│   ├── socket-server.ts   # Socket.io server setup
-│   └── spotify.ts         # Spotify API wrapper
-└── types/                 # TypeScript type definitions
-```
 
-## 🎯 Game Flow
+## Database Schema
 
-1. **Authentication**: Users login via Spotify OAuth
-2. **Lobby Creation**: Creator sets game parameters and gets shareable lobby ID
-3. **Player Joining**: Other players join via lobby ID or link
-4. **Track Fetching**: Each player's top 100 tracks are fetched from Spotify
-5. **Game Rounds**: Random tracks are played, players guess the owner
-6. **Scoring**: Correct guesses earn points, live leaderboard updates
-7. **Results**: Final scoreboard with winner celebration
+The app uses these main tables:
 
-## 🔧 Configuration Options
+- **lobbies**: Game lobby information and settings
+- **lobby_players**: Players in each lobby
+- **game_sessions**: Active game state and track pools
+- **player_scores**: Individual player scores and round history
+- **round_guesses**: Player guesses for each round
 
-### Lobby Settings
+See `supabase/schema.sql` for the complete schema.
 
-- **Number of Rounds**: 5, 10, 15, or 20 rounds
-- **Song Duration**: 15, 30, 45, or 60 seconds per song
-- **Show Track Info**: Toggle to show/hide song title and artist during gameplay
-
-### Spotify Integration
-
-- Fetches up to 100 tracks per user from the "short_term" time range (last ~4 weeks)
-- Only includes tracks with preview URLs (30-second snippets)
-- Requires users to have sufficient listening history
-
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
-1. **"No tracks found"**: User needs more Spotify listening history or Premium account
-2. **Audio not playing**: Browser autoplay restrictions - user interaction required
-3. **Socket connection issues**: Check firewall settings and port availability
-4. **Authentication errors**: Verify Spotify app configuration and redirect URIs
+1. **"No preview available"**: Some tracks don't have 30-second previews
+2. **Authentication errors**: Check Spotify redirect URIs
+3. **Database errors**: Verify Supabase connection and schema
+4. **Audio not playing**: Browser audio policies require user interaction
 
 ### Development Tips
 
-- Use browser dev tools to monitor WebSocket connections
-- Check Network tab for API call failures
-- Spotify Web API has rate limits - implement backoff if needed
-- Test with multiple users in different browsers/incognito windows
+- Use browser dev tools to debug audio issues
+- Check Network tab for API errors
+- Monitor Supabase logs for database issues
+- Test with multiple browser tabs for multiplayer simulation
 
-## 📝 License
-
-This project is for educational and entertainment purposes. Make sure to comply with Spotify's Developer Terms of Service when using their API.
-
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -161,6 +180,18 @@ This project is for educational and entertainment purposes. Make sure to comply 
 4. Test thoroughly
 5. Submit a pull request
 
-## 🎵 Have Fun!
+## License
 
-Enjoy discovering your friends' music taste and competing for the ultimate Spotify knowledge crown! 🏆
+MIT License - see LICENSE file for details.
+
+## Credits
+
+- Built with [Next.js](https://nextjs.org)
+- Authentication by [NextAuth.js](https://next-auth.js.org)
+- Database and real-time by [Supabase](https://supabase.com)
+- Music data from [Spotify Web API](https://developer.spotify.com/documentation/web-api)
+- Icons by [Lucide React](https://lucide.dev)
+
+---
+
+Enjoy playing SpotiGame! 🎵🎮

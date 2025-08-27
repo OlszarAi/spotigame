@@ -2,33 +2,35 @@
   "name": "spotigame",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --turbopack",
+    "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
-    "@types/uuid": "^10.0.0",
-    "next": "15.5.1",
+    "@auth/supabase-adapter": "^1.10.0",
+    "@supabase/supabase-js": "^2.56.0",
+    "@types/spotify-web-api-node": "^5.0.11",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.542.0",
+    "next": "15.5.2",
     "next-auth": "^4.24.11",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "spotify-web-api-node": "^5.0.2",
-    "uuid": "^11.1.0"
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20.19.11",
+    "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/spotify-web-api-node": "^5.0.11",
     "eslint": "^9",
-    "eslint-config-next": "15.5.1",
+    "eslint-config-next": "15.5.2",
     "tailwindcss": "^4",
-    "tsx": "^4.20.5",
     "typescript": "^5"
   }
 }
