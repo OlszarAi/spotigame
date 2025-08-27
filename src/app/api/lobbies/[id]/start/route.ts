@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { fetchUserTopTracks, createTrackPool } from '@/lib/spotify'
 
 interface RouteParams {
@@ -18,6 +18,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const supabaseAdmin = getSupabaseAdmin()
 
     // Verify user is in the lobby and lobby is ready to start
     const { data: lobby, error: lobbyError } = await supabaseAdmin
@@ -148,6 +150,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    const supabaseAdmin = getSupabaseAdmin()
 
     const { data: gameSession, error } = await supabaseAdmin
       .from('game_sessions')

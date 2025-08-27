@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { LobbySettings } from '@/types/database'
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('Creating lobby - checking session...')
+    
+    const supabaseAdmin = getSupabaseAdmin()
+    
     const session = await getServerSession(authOptions)
     
     if (!session?.user?.id) {
+      console.log('No session or user ID')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    console.log('Session found:', { userId: session.user.id, email: session.user.email })
 
     const { name, settings }: { name: string; settings?: Partial<LobbySettings> } = await request.json()
 
@@ -26,6 +33,8 @@ export async function POST(request: NextRequest) {
 
     const lobbySettings = { ...defaultSettings, ...settings }
 
+    console.log('Attempting to create lobby:', { name: name.trim(), creator_id: session.user.id })
+
     // Create lobby
     const { data: lobby, error: lobbyError } = await supabaseAdmin
       .from('lobbies')
@@ -39,8 +48,10 @@ export async function POST(request: NextRequest) {
 
     if (lobbyError) {
       console.error('Error creating lobby:', lobbyError)
-      return NextResponse.json({ error: 'Failed to create lobby' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to create lobby', details: lobbyError }, { status: 500 })
     }
+
+    console.log('Lobby created successfully:', lobby.id)
 
     // Add creator as first player
     const { error: playerError } = await supabaseAdmin
@@ -69,6 +80,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
+    const supabaseAdmin = getSupabaseAdmin()
+    
     const session = await getServerSession(authOptions)
     
     if (!session?.user?.id) {

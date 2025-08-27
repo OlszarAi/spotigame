@@ -1,15 +1,19 @@
--- Supabase database schema for SpotiGame
+-- Migration script to create initial tables (without NextAuth dependencies)
+
+-- Drop existing tables if they exist (with cascade to handle foreign keys)
+DROP TABLE IF EXISTS round_guesses CASCADE;
+DROP TABLE IF EXISTS player_scores CASCADE;
+DROP TABLE IF EXISTS game_sessions CASCADE;
+DROP TABLE IF EXISTS lobby_players CASCADE;
+DROP TABLE IF EXISTS lobbies CASCADE;
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Users table (NextAuth will create this, but we'll extend it)
--- The NextAuth adapter will create: users, accounts, sessions, verification_tokens in public schema
-
--- Lobbies table
+-- Lobbies table (without foreign key to users for now)
 CREATE TABLE lobbies (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  creator_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  creator_id TEXT NOT NULL, -- We'll add foreign key later when users table exists
   name TEXT NOT NULL,
   settings JSONB NOT NULL DEFAULT '{
     "rounds": 10,
@@ -23,11 +27,11 @@ CREATE TABLE lobbies (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Lobby players table
+-- Lobby players table (without foreign key to users for now)
 CREATE TABLE lobby_players (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   lobby_id UUID REFERENCES lobbies(id) ON DELETE CASCADE,
-  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL, -- We'll add foreign key later when users table exists
   username TEXT NOT NULL,
   avatar_url TEXT,
   joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -49,11 +53,11 @@ CREATE TABLE game_sessions (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Player scores table
+-- Player scores table (without foreign key to users for now)
 CREATE TABLE player_scores (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   game_session_id UUID REFERENCES game_sessions(id) ON DELETE CASCADE,
-  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL, -- We'll add foreign key later when users table exists
   total_score INTEGER DEFAULT 0,
   round_scores JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -61,13 +65,13 @@ CREATE TABLE player_scores (
   UNIQUE(game_session_id, user_id)
 );
 
--- Round guesses table
+-- Round guesses table (without foreign key to users for now)
 CREATE TABLE round_guesses (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   game_session_id UUID REFERENCES game_sessions(id) ON DELETE CASCADE,
-  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL, -- We'll add foreign key later when users table exists
   round_number INTEGER NOT NULL,
-  guessed_user_id TEXT REFERENCES users(id),
+  guessed_user_id TEXT, -- We'll add foreign key later when users table exists
   is_correct BOOLEAN DEFAULT FALSE,
   points_earned INTEGER DEFAULT 0,
   submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -81,28 +85,22 @@ ALTER TABLE game_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE player_scores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE round_guesses ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies
-
--- Lobbies: Anyone can read, only creator can update
+-- RLS Policies (simplified for now)
 CREATE POLICY "Anyone can view lobbies" ON lobbies FOR SELECT USING (true);
 CREATE POLICY "Creator can update lobby" ON lobbies FOR UPDATE USING (true);
 CREATE POLICY "Authenticated users can create lobbies" ON lobbies FOR INSERT WITH CHECK (true);
 
--- Lobby players: Anyone can read, users can join/leave
 CREATE POLICY "Anyone can view lobby players" ON lobby_players FOR SELECT USING (true);
 CREATE POLICY "Users can join lobbies" ON lobby_players FOR INSERT WITH CHECK (true);
 CREATE POLICY "Users can update their lobby status" ON lobby_players FOR UPDATE USING (true);
 CREATE POLICY "Users can leave lobbies" ON lobby_players FOR DELETE USING (true);
 
--- Game sessions: Anyone can read
 CREATE POLICY "Anyone can view game sessions" ON game_sessions FOR SELECT USING (true);
 CREATE POLICY "System can manage game sessions" ON game_sessions FOR ALL USING (true);
 
--- Player scores: Anyone can read
 CREATE POLICY "Anyone can view player scores" ON player_scores FOR SELECT USING (true);
 CREATE POLICY "System can manage player scores" ON player_scores FOR ALL USING (true);
 
--- Round guesses: Users can only see and manage their own guesses
 CREATE POLICY "Users can view all round guesses" ON round_guesses FOR SELECT USING (true);
 CREATE POLICY "Users can submit their own guesses" ON round_guesses FOR INSERT WITH CHECK (true);
 CREATE POLICY "Users can update their own guesses" ON round_guesses FOR UPDATE USING (true);
@@ -116,7 +114,6 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Add updated_at triggers
 CREATE TRIGGER update_lobbies_updated_at BEFORE UPDATE ON lobbies FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_game_sessions_updated_at BEFORE UPDATE ON game_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_player_scores_updated_at BEFORE UPDATE ON player_scores FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
