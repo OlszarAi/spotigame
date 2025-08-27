@@ -67,16 +67,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const userTracks = []
     for (const player of lobby.lobby_players) {
       try {
-        // Get user's access token (this would require storing it during auth)
-        // For now, we'll use the session user's token for all players
-        if (player.user_id === session.user.id && session.accessToken) {
-          const tracks = await fetchUserTopTracks(session.accessToken)
-          userTracks.push({
-            userId: player.user_id,
-            username: player.username,
-            tracks
-          })
+        // Get user's access token and refresh token from the accounts table
+        const { data: account, error: accountError } = await supabaseAdmin
+          .from('accounts')
+          .select('access_token, refresh_token')
+          .eq('userId', player.user_id)
+          .eq('provider', 'spotify')
+          .single()
+
+        if (accountError || !account?.access_token) {
+          console.error(`No Spotify access token found for user ${player.user_id}:`, accountError)
+          continue
         }
+
+        const tracks = await fetchUserTopTracks(account.access_token, player.user_id, account.refresh_token)
+        userTracks.push({
+          userId: player.user_id,
+          username: player.username,
+          tracks
+        })
       } catch (error) {
         console.error(`Error fetching tracks for user ${player.user_id}:`, error)
         // Continue with other players
@@ -84,8 +93,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     if (userTracks.length === 0) {
-      return NextResponse.json({ error: 'Failed to fetch tracks for any player' }, { status: 500 })
+      console.error('Failed to fetch tracks for any player. Players in lobby:', lobby.lobby_players.map((p: { user_id: string; username: string; is_ready: boolean }) => ({ id: p.user_id, username: p.username })))
+      return NextResponse.json({ 
+        error: 'Failed to fetch tracks for any player. Please ensure all players have connected their Spotify accounts.' 
+      }, { status: 500 })
     }
+
+    console.log(`Successfully fetched tracks for ${userTracks.length} out of ${lobby.lobby_players.length} players`)
+    userTracks.forEach(user => {
+      console.log(`User ${user.username}: ${user.tracks.length} tracks fetched`)
+    })
 
     // Create track pool
     const trackPool = createTrackPool(userTracks)

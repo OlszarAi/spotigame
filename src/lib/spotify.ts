@@ -18,7 +18,38 @@ export interface UserTopTracks {
   tracks: SpotifyTrack[]
 }
 
-export async function fetchUserTopTracks(accessToken: string): Promise<SpotifyTrack[]> {
+async function refreshSpotifyToken(userId: string, refreshToken: string): Promise<string | null> {
+  try {
+    const spotifyApi = new SpotifyWebApi({
+      clientId: process.env.SPOTIFY_CLIENT_ID!,
+      clientSecret: process.env.SPOTIFY_CLIENT_SECRET!,
+    })
+
+    spotifyApi.setRefreshToken(refreshToken)
+    const data = await spotifyApi.refreshAccessToken()
+    const newAccessToken = data.body.access_token
+
+    // Update the access token in the database
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
+    await supabase
+      .from('accounts')
+      .update({ access_token: newAccessToken })
+      .eq('userId', userId)
+      .eq('provider', 'spotify')
+
+    return newAccessToken
+  } catch (error) {
+    console.error('Error refreshing Spotify token:', error)
+    return null
+  }
+}
+
+export async function fetchUserTopTracks(accessToken: string, userId?: string, refreshToken?: string): Promise<SpotifyTrack[]> {
   const spotifyApi = new SpotifyWebApi()
   spotifyApi.setAccessToken(accessToken)
 
@@ -39,7 +70,40 @@ export async function fetchUserTopTracks(accessToken: string): Promise<SpotifyTr
         images: track.album.images
       }
     }))
-  } catch (error) {
+  } catch (error: unknown) {
+    // If token is expired and we have refresh token, try to refresh
+    const spotifyError = error as { statusCode?: number }
+    if (spotifyError?.statusCode === 401 && userId && refreshToken) {
+      console.log(`Access token expired for user ${userId}, attempting to refresh...`)
+      const newAccessToken = await refreshSpotifyToken(userId, refreshToken)
+      
+      if (newAccessToken) {
+        // Retry with new token
+        spotifyApi.setAccessToken(newAccessToken)
+        try {
+          const response = await spotifyApi.getMyTopTracks({
+            time_range: 'short_term',
+            limit: 100
+          })
+
+          return response.body.items.map(track => ({
+            id: track.id,
+            name: track.name,
+            artists: track.artists.map(artist => ({ name: artist.name })),
+            preview_url: track.preview_url,
+            external_urls: track.external_urls,
+            album: {
+              name: track.album.name,
+              images: track.album.images
+            }
+          }))
+        } catch (retryError) {
+          console.error('Error fetching top tracks after token refresh:', retryError)
+          throw new Error('Failed to fetch Spotify tracks after token refresh')
+        }
+      }
+    }
+    
     console.error('Error fetching top tracks:', error)
     throw new Error('Failed to fetch Spotify tracks')
   }

@@ -28,7 +28,7 @@ export const authOptions = {
   ],
   callbacks: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async signIn({ user, account, profile }: any) {
+    async signIn({ user, account }: any) {
       // Custom logic to save user to Supabase when they sign in
       if (account?.provider === 'spotify' && user.email) {
         try {
