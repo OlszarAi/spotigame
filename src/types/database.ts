@@ -204,7 +204,7 @@ export interface LobbyWithPlayers {
   max_players: number
   created_at: string
   updated_at: string
-  players: LobbyPlayer[]
+  lobby_players: LobbyPlayer[]
 }
 
 export interface LobbyPlayer {

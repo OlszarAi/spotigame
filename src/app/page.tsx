@@ -199,7 +199,7 @@ export default function HomePage() {
                   
                   <div className="flex items-center text-spotify-light-gray text-sm mb-2">
                     <Users className="w-4 h-4 mr-1" />
-                    <span>{lobby.players?.length || 0}/{lobby.max_players} players</span>
+                    <span>{lobby.lobby_players?.length || 0}/{lobby.max_players} players</span>
                   </div>
                   
                   <div className="flex items-center text-spotify-light-gray text-sm">

@@ -43,7 +43,7 @@ export default function LobbyPage() {
         
         // Check if current user is in lobby and ready
         const userId = session?.user ? (session.user as { id: string }).id : null
-        const currentPlayer = data.lobby.players?.find(
+        const currentPlayer = data.lobby.lobby_players?.find(
           (p: { user_id: string; is_ready: boolean }) => p.user_id === userId
         )
         setIsReady(currentPlayer?.is_ready || false)
@@ -128,11 +128,24 @@ export default function LobbyPage() {
     if (!(session?.user as { id: string })?.id) return
     
     try {
-      // This would need a separate API endpoint to update player ready status
-      // For now, we'll simulate it
-      setIsReady(!isReady)
+      const response = await fetch(`/api/lobbies/${lobbyId}/ready`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ isReady: !isReady })
+      })
+      
+      if (response.ok) {
+        setIsReady(!isReady)
+        await fetchLobby()
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Failed to update ready status')
+      }
     } catch (error) {
       console.error('Error toggling ready:', error)
+      alert('Failed to update ready status')
     }
   }
 
@@ -223,10 +236,10 @@ export default function LobbyPage() {
   }
 
   const isCreator = lobby.creator_id === (session?.user as { id: string })?.id
-  const currentPlayer = lobby.players?.find(p => p.user_id === (session?.user as { id: string })?.id)
+  const currentPlayer = lobby.lobby_players?.find(p => p.user_id === (session?.user as { id: string })?.id)
   const isInLobby = !!currentPlayer
-  const allPlayersReady = lobby.players?.every(p => p.is_ready) || false
-  const canStart = isCreator && lobby.players && lobby.players.length >= 2 && allPlayersReady
+  const allPlayersReady = lobby.lobby_players?.every(p => p.is_ready) || false
+  const canStart = isCreator && lobby.lobby_players && lobby.lobby_players.length >= 2 && allPlayersReady
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-spotify-black via-spotify-dark-gray to-spotify-black">
@@ -266,7 +279,7 @@ export default function LobbyPage() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-spotify-white flex items-center">
                   <Users className="w-5 h-5 mr-2" />
-                  Players ({lobby.players?.length || 0}/{lobby.max_players})
+                  Players ({lobby.lobby_players?.length || 0}/{lobby.max_players})
                 </h2>
                 
                 {!isInLobby && (
@@ -281,7 +294,7 @@ export default function LobbyPage() {
               </div>
 
               <div className="space-y-3">
-                {lobby.players?.map((player) => (
+                {lobby.lobby_players?.map((player) => (
                   <div 
                     key={player.id}
                     className="flex items-center justify-between bg-spotify-black rounded-lg p-3 border border-spotify-gray"
@@ -463,7 +476,7 @@ export default function LobbyPage() {
                 
                 {!canStart && (
                   <div className="mb-4 text-sm text-spotify-light-gray">
-                    {lobby.players && lobby.players.length < 2 ? (
+                    {lobby.lobby_players && lobby.lobby_players.length < 2 ? (
                       <p>• Need at least 2 players</p>
                     ) : !allPlayersReady ? (
                       <p>• All players must be ready</p>
