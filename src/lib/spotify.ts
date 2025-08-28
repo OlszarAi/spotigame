@@ -58,10 +58,20 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
     
     // First, let's test with a specific popular track to see the response format
     try {
-      const testSearch = await spotifyApi.searchTracks('Blinding Lights The Weeknd', { limit: 1 })
+      const testSearch = await spotifyApi.searchTracks('Blinding Lights The Weeknd', { 
+        limit: 1,
+        market: 'US' // Try US market explicitly
+      })
       if (testSearch.body.tracks && testSearch.body.tracks.items.length > 0) {
         const testTrack = testSearch.body.tracks.items[0]
-        console.log(`TEST TRACK - Name: "${testTrack.name}", Preview: ${testTrack.preview_url || 'NULL'}, Full object:`, JSON.stringify(testTrack, null, 2))
+        console.log(`TEST TRACK (US market) - Name: "${testTrack.name}", Preview: ${testTrack.preview_url || 'NULL'}`)
+        
+        // Try without market parameter too
+        const testSearchNoMarket = await spotifyApi.searchTracks('Blinding Lights The Weeknd', { limit: 1 })
+        if (testSearchNoMarket.body.tracks && testSearchNoMarket.body.tracks.items.length > 0) {
+          const testTrackNoMarket = testSearchNoMarket.body.tracks.items[0]
+          console.log(`TEST TRACK (no market) - Name: "${testTrackNoMarket.name}", Preview: ${testTrackNoMarket.preview_url || 'NULL'}`)
+        }
       }
     } catch (testError) {
       console.log('Test search failed:', testError)
@@ -189,8 +199,59 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
       }
     }
     
-    console.error('Error fetching top tracks:', error)
-    throw new Error('Failed to fetch Spotify tracks')
+    console.error('Error in fetchUserTopTracks:', error)
+    
+    // FALLBACK: If personal tracks fail, try using popular tracks from search
+    console.log(`Fallback: Using popular tracks from search API for user ${userId}`)
+    try {
+      const spotifyApi = new SpotifyWebApi()
+      spotifyApi.setAccessToken(accessToken)
+      
+      const popularQueries = [
+        'year:2024', 'year:2023', 'genre:pop', 'genre:hip-hop', 'genre:rock'
+      ]
+      
+      const fallbackTracks: SpotifyTrack[] = []
+      
+      for (const query of popularQueries) {
+        try {
+          const searchResponse = await spotifyApi.searchTracks(query, { 
+            limit: 10,
+            market: 'US'
+          })
+          
+          const tracks = searchResponse.body.tracks?.items.map(track => {
+            console.log(`Fallback Track: "${track.name}" by ${track.artists[0]?.name} - preview_url: ${track.preview_url || 'NULL'}`)
+            return {
+              id: track.id,
+              name: track.name,
+              artists: track.artists.map(artist => ({ name: artist.name })),
+              preview_url: track.preview_url,
+              external_urls: track.external_urls,
+              album: {
+                name: track.album.name,
+                images: track.album.images
+              }
+            }
+          }) || []
+          
+          fallbackTracks.push(...tracks)
+          
+          if (fallbackTracks.length >= 20) break
+        } catch (searchError) {
+          console.log(`Failed search for ${query}:`, searchError)
+        }
+      }
+      
+      console.log(`Fallback: Got ${fallbackTracks.length} tracks from search`)
+      const tracksWithPreviews = fallbackTracks.filter(track => track.preview_url)
+      console.log(`Fallback: ${tracksWithPreviews.length} tracks have preview URLs`)
+      
+      return fallbackTracks
+    } catch (fallbackError) {
+      console.error('Fallback search also failed:', fallbackError)
+      throw new Error('Failed to fetch any tracks')
+    }
   }
 }
 
