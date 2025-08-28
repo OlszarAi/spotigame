@@ -1,4 +1,6 @@
 import SpotifyWebApi from 'spotify-web-api-node'
+// @ts-expect-error - no types available for this package
+import spotifyPreviewFinder from 'spotify-preview-finder'
 
 export interface SpotifyTrack {
   id: string
@@ -9,6 +11,40 @@ export interface SpotifyTrack {
   album: {
     name: string
     images: Array<{ url: string; height?: number; width?: number }>
+  }
+}
+
+// Function to get preview URL using workaround for development mode
+async function getPreviewUrl(trackId: string, artistName: string, trackName: string): Promise<string | null> {
+  try {
+    // Try the spotify-preview-finder package first
+    const previewUrl = await spotifyPreviewFinder(trackId)
+    if (previewUrl) {
+      console.log(`Found preview URL for "${trackName}" by ${artistName}: ${previewUrl}`)
+      return previewUrl
+    }
+    
+    // Alternative: construct potential preview URL based on track ID
+    // Spotify preview URLs follow a pattern: https://p.scdn.co/mp3-preview/[hash]
+    // This is a fallback that sometimes works
+    const possibleUrl = `https://p.scdn.co/mp3-preview/${trackId}`
+    
+    // Test if the URL exists by making a HEAD request
+    try {
+      const response = await fetch(possibleUrl, { method: 'HEAD' })
+      if (response.ok) {
+        console.log(`Found alternative preview URL for "${trackName}" by ${artistName}: ${possibleUrl}`)
+        return possibleUrl
+      }
+    } catch {
+      // Ignore fetch errors
+    }
+    
+    console.log(`No preview URL found for "${trackName}" by ${artistName}`)
+    return null
+  } catch (error) {
+    console.log(`Error getting preview URL for "${trackName}" by ${artistName}:`, error)
+    return null
   }
 }
 
@@ -103,7 +139,25 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
           }
         })
 
-        allTracks = [...allTracks, ...tracks]
+        // If tracks don't have preview URLs, try to get them using workaround
+        const tracksWithWorkaroundPreviews = await Promise.all(
+          tracks.map(async (track) => {
+            if (!track.preview_url) {
+              const workaroundPreview = await getPreviewUrl(
+                track.id,
+                track.artists[0]?.name || 'Unknown',
+                track.name
+              )
+              return {
+                ...track,
+                preview_url: workaroundPreview
+              }
+            }
+            return track
+          })
+        )
+
+        allTracks = [...allTracks, ...tracksWithWorkaroundPreviews]
         
         // If we have enough tracks with previews, we can stop
         const tracksWithPreviews = allTracks.filter(track => track.preview_url)
@@ -178,7 +232,7 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
             limit: 50
           })
 
-          return response.body.items.map(track => {
+          const tracks = response.body.items.map(track => {
             console.log(`Retry Track: "${track.name}" by ${track.artists[0]?.name} - preview_url: ${track.preview_url || 'NULL'}`)
             return {
               id: track.id,
@@ -192,6 +246,26 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
               }
             }
           })
+
+          // Apply workaround for missing preview URLs
+          const tracksWithWorkaroundPreviews = await Promise.all(
+            tracks.map(async (track) => {
+              if (!track.preview_url) {
+                const workaroundPreview = await getPreviewUrl(
+                  track.id,
+                  track.artists[0]?.name || 'Unknown',
+                  track.name
+                )
+                return {
+                  ...track,
+                  preview_url: workaroundPreview
+                }
+              }
+              return track
+            })
+          )
+
+          return tracksWithWorkaroundPreviews
         } catch (retryError) {
           console.error('Error fetching top tracks after token refresh:', retryError)
           throw new Error('Failed to fetch Spotify tracks after token refresh')
@@ -235,7 +309,25 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
             }
           }) || []
           
-          fallbackTracks.push(...tracks)
+          // Apply workaround for missing preview URLs
+          const tracksWithWorkaroundPreviews = await Promise.all(
+            tracks.map(async (track) => {
+              if (!track.preview_url) {
+                const workaroundPreview = await getPreviewUrl(
+                  track.id,
+                  track.artists[0]?.name || 'Unknown',
+                  track.name
+                )
+                return {
+                  ...track,
+                  preview_url: workaroundPreview
+                }
+              }
+              return track
+            })
+          )
+          
+          fallbackTracks.push(...tracksWithWorkaroundPreviews)
           
           if (fallbackTracks.length >= 20) break
         } catch (searchError) {
