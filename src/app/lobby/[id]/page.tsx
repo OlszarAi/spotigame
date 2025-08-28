@@ -14,7 +14,8 @@ import {
   Clock,
   Music,
   Eye,
-  EyeOff
+  EyeOff,
+  LogOut
 } from 'lucide-react'
 import { LobbyWithPlayers, LobbySettings } from '@/types/database'
 import { supabase } from '@/lib/supabase'
@@ -41,6 +42,12 @@ export default function LobbyPage() {
         setLobby(data.lobby)
         setSettings(data.lobby.settings)
         
+        // Check if game has started and redirect all players
+        if (data.lobby.status === 'starting' || data.lobby.status === 'in_progress') {
+          router.push(`/game/${lobbyId}`)
+          return
+        }
+        
         // Check if current user is in lobby and ready
         const userId = session?.user ? (session.user as { id: string }).id : null
         const currentPlayer = data.lobby.lobby_players?.find(
@@ -57,7 +64,16 @@ export default function LobbyPage() {
     }
   }, [lobbyId, session?.user, router])
 
+  // Debounced version of fetchLobby
+  const debouncedFetchLobby = useCallback(() => {
+    const timeoutId = setTimeout(() => {
+      fetchLobby()
+    }, 100)
+    return () => clearTimeout(timeoutId)
+  }, [fetchLobby])
+
   const setupRealtimeSubscription = useCallback(() => {
+    console.log('Setting up realtime subscription for lobby:', lobbyId)
     const channel = supabase
       .channel(`lobby-${lobbyId}`)
       .on(
@@ -68,8 +84,9 @@ export default function LobbyPage() {
           table: 'lobbies',
           filter: `id=eq.${lobbyId}`
         },
-        () => {
-          fetchLobby()
+        (payload) => {
+          console.log('Lobby change detected:', payload)
+          debouncedFetchLobby()
         }
       )
       .on(
@@ -80,16 +97,20 @@ export default function LobbyPage() {
           table: 'lobby_players',
           filter: `lobby_id=eq.${lobbyId}`
         },
-        () => {
-          fetchLobby()
+        (payload) => {
+          console.log('Lobby players change detected:', payload)
+          debouncedFetchLobby()
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status)
+      })
 
     return () => {
+      console.log('Cleaning up realtime subscription')
       supabase.removeChannel(channel)
     }
-  }, [lobbyId, fetchLobby])
+  }, [lobbyId, debouncedFetchLobby])
 
   useEffect(() => {
     if (!(session?.user as { id: string })?.id) {
@@ -168,6 +189,26 @@ export default function LobbyPage() {
       }
     } catch (error) {
       console.error('Error updating settings:', error)
+    }
+  }
+
+  const leaveLobby = async () => {
+    if (!(session?.user as { id: string })?.id) return
+    
+    try {
+      const response = await fetch(`/api/lobbies/${lobbyId}`, {
+        method: 'DELETE'
+      })
+      
+      if (response.ok) {
+        router.push('/')
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Failed to leave lobby')
+      }
+    } catch (error) {
+      console.error('Error leaving lobby:', error)
+      alert('Failed to leave lobby')
     }
   }
 
@@ -342,7 +383,7 @@ export default function LobbyPage() {
               </div>
 
               {isInLobby && (
-                <div className="mt-4 pt-4 border-t border-spotify-gray">
+                <div className="mt-4 pt-4 border-t border-spotify-gray space-y-3">
                   <button
                     onClick={toggleReady}
                     className={`w-full py-3 px-4 rounded-lg font-semibold transition-all duration-300 ${
@@ -352,6 +393,14 @@ export default function LobbyPage() {
                     }`}
                   >
                     {isReady ? 'Ready!' : 'Mark as Ready'}
+                  </button>
+                  
+                  <button
+                    onClick={leaveLobby}
+                    className="w-full py-2 px-4 rounded-lg font-medium border border-red-500 text-red-500 hover:bg-red-500 hover:text-white transition-all duration-300 flex items-center justify-center space-x-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Leave Lobby</span>
                   </button>
                 </div>
               )}

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
-import { getSupabaseAdmin } from '@/lib/supabase'
+import { prisma } from '@/lib/prisma'
 
 interface RouteParams {
   params: Promise<{
@@ -18,21 +18,21 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const supabaseAdmin = getSupabaseAdmin()
     const { isReady } = await request.json()
 
     // Update player ready status
-    const { data: player, error } = await supabaseAdmin
-      .from('lobby_players')
-      .update({ is_ready: isReady })
-      .eq('lobby_id', id)
-      .eq('user_id', session.user.id)
-      .select()
-      .single()
+    const player = await prisma.lobbyPlayer.updateMany({
+      where: {
+        lobbyId: id,
+        userId: session.user.id
+      },
+      data: {
+        isReady: isReady
+      }
+    })
 
-    if (error) {
-      console.error('Error updating player ready status:', error)
-      return NextResponse.json({ error: 'Failed to update ready status' }, { status: 500 })
+    if (player.count === 0) {
+      return NextResponse.json({ error: 'Player not found in lobby' }, { status: 404 })
     }
 
     return NextResponse.json({ player })
