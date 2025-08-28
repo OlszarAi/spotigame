@@ -24,29 +24,41 @@ export const authOptions: NextAuthOptions = {
       authorization: LOGIN_URL,
     }),
   ],
+  debug: process.env.NODE_ENV === 'development',
+  secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
-    async jwt({ token, account, user }) {
-      if (account && user) {
-        return {
-          ...token,
-          accessToken: account.access_token,
-          refreshToken: account.refresh_token,
-          username: account.providerAccountId,
-          accessTokenExpires: account.expires_at! * 1000,
+    async session({ session, token, user }) {
+      console.log('Session callback called:', { hasToken: !!token, hasUser: !!user })
+      
+      // Jeśli używamy database sessions, tokeny są w account
+      if (user?.id) {
+        try {
+          // Pobierz konto Spotify dla tego użytkownika
+          const account = await prisma.account.findFirst({
+            where: {
+              userId: user.id,
+              provider: 'spotify'
+            }
+          })
+          
+          if (account?.access_token) {
+            console.log('Found Spotify account with access token')
+            session.user.accessToken = account.access_token
+            session.user.refreshToken = account.refresh_token || undefined
+            session.user.username = account.providerAccountId
+          } else {
+            console.log('No Spotify account found or no access token')
+          }
+        } catch (error) {
+          console.error('Error fetching account:', error)
         }
+      } else if (token?.accessToken) {
+        // Fallback dla JWT strategy
+        console.log('Using JWT token data')
+        session.user.accessToken = token.accessToken as string
+        session.user.refreshToken = token.refreshToken as string
+        session.user.username = token.username as string
       }
-
-      if (Date.now() < (token.accessTokenExpires as number)) {
-        return token
-      }
-
-      return await refreshAccessToken(token)
-    },
-
-    async session({ session, token }) {
-      session.user.accessToken = token.accessToken as string
-      session.user.refreshToken = token.refreshToken as string
-      session.user.username = token.username as string
 
       return session
     },
@@ -54,44 +66,4 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/login',
   },
-}
-
-async function refreshAccessToken(token: any) {
-  try {
-    const url = 'https://accounts.spotify.com/api/token'
-
-    const response = await fetch(url, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Basic ${Buffer.from(
-          `${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`
-        ).toString('base64')}`,
-      },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: token.refreshToken,
-      }),
-      method: 'POST',
-    })
-
-    const refreshedTokens = await response.json()
-
-    if (!response.ok) {
-      throw refreshedTokens
-    }
-
-    return {
-      ...token,
-      accessToken: refreshedTokens.access_token,
-      accessTokenExpires: Date.now() + refreshedTokens.expires_in * 1000,
-      refreshToken: refreshedTokens.refresh_token ?? token.refreshToken,
-    }
-  } catch (error) {
-    console.log(error)
-
-    return {
-      ...token,
-      error: 'RefreshAccessTokenError',
-    }
-  }
 }
