@@ -135,11 +135,35 @@ export async function POST(
       })
     }
 
-    // Update game status to PLAYING
+    // Update game status to PLAYING and start first round
     await prisma.game.update({
       where: { id: game.id },
-      data: { status: 'PLAYING' }
+      data: { 
+        status: 'PLAYING',
+        currentRound: 1
+      }
     })
+
+    // Get the first round to start it
+    const firstRound = await prisma.round.findFirst({
+      where: { 
+        gameId: game.id,
+        roundNumber: 1
+      }
+    })
+
+    if (firstRound) {
+      // Update first round with startedAt time
+      await prisma.round.update({
+        where: { id: firstRound.id },
+        data: { startedAt: new Date() }
+      })
+
+      // Notify game that first round has started
+      await pusherServer.trigger(`game-${game.id}`, 'round-started', {
+        round: firstRound
+      })
+    }
 
     // Notify lobby that game has started
     await pusherServer.trigger(`lobby-${params.id}`, 'game-started', {

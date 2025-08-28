@@ -132,7 +132,6 @@ export default function GamePage({ params }: { params: { id: string } }) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          roundId: currentRound.id,
           guessedUserId: selectedPlayerId,
         }),
       })

@@ -35,7 +35,7 @@ export async function GET(
 
     // Get current round
     const currentRound = game.rounds.find((round: any) => 
-      round.roundNumber === game.currentRound + 1
+      round.roundNumber === game.currentRound
     )
 
     return NextResponse.json({
