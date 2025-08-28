@@ -56,7 +56,7 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
   try {
     const response = await spotifyApi.getMyTopTracks({
       time_range: 'short_term',
-      limit: 100
+      limit: 50 // Spotify API maximum limit is 50
     })
 
     return response.body.items.map(track => ({
@@ -83,7 +83,7 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
         try {
           const response = await spotifyApi.getMyTopTracks({
             time_range: 'short_term',
-            limit: 100
+            limit: 50 // Spotify API maximum limit is 50
           })
 
           return response.body.items.map(track => ({

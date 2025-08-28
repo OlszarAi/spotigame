@@ -1,0 +1,187 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// NextAuth.js tables
+model User {
+  id            String    @id
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime? @map("emailVerified")
+  image         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  accounts      Account[]
+  sessions      Session[]
+  createdLobbies Lobby[]  @relation("LobbyCreator")
+  lobbyPlayers  LobbyPlayer[]
+  playerScores  PlayerScore[]
+  roundGuesses  RoundGuess[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String  @map("userId")
+  type              String
+  provider          String
+  providerAccountId String  @map("providerAccountId")
+  refreshToken      String? @map("refresh_token")
+  accessToken       String? @map("access_token")
+  expiresAt         Int?    @map("expires_at")
+  tokenType         String? @map("token_type")
+  scope             String?
+  idToken           String? @map("id_token")
+  sessionState      String? @map("session_state")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique @map("sessionToken")
+  userId       String   @map("userId")
+  expires      DateTime
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// Game tables
+model Lobby {
+  id           String      @id @default(uuid())
+  creatorId    String      @map("creator_id")
+  name         String
+  settings     Json        @default("{\"rounds\": 10, \"snippet_duration\": 30, \"show_track_info\": false}")
+  status       LobbyStatus @default(waiting)
+  currentRound Int         @default(0) @map("current_round")
+  maxPlayers   Int         @default(8) @map("max_players")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  creator       User           @relation("LobbyCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  players       LobbyPlayer[]
+  gameSessions  GameSession[]
+
+  @@map("lobbies")
+}
+
+model LobbyPlayer {
+  id        String   @id @default(uuid())
+  lobbyId   String   @map("lobby_id")
+  userId    String   @map("user_id")
+  username  String
+  avatarUrl String?  @map("avatar_url")
+  joinedAt  DateTime @default(now()) @map("joined_at")
+  isReady   Boolean  @default(false) @map("is_ready")
+
+  // Relations
+  lobby Lobby @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([lobbyId, userId])
+  @@map("lobby_players")
+}
+
+model GameSession {
+  id             String            @id @default(uuid())
+  lobbyId        String            @map("lobby_id")
+  trackPool      Json              @default("[]") @map("track_pool")
+  currentTrack   Json?             @map("current_track")
+  roundNumber    Int               @default(1) @map("round_number")
+  roundStartTime DateTime?         @map("round_start_time")
+  roundEndTime   DateTime?         @map("round_end_time")
+  status         GameSessionStatus @default(preparing)
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  lobby        Lobby          @relation(fields: [lobbyId], references: [id], onDelete: Cascade)
+  playerScores PlayerScore[]
+  roundGuesses RoundGuess[]
+
+  @@map("game_sessions")
+}
+
+model PlayerScore {
+  id            String   @id @default(uuid())
+  gameSessionId String   @map("game_session_id")
+  userId        String   @map("user_id")
+  totalScore    Int      @default(0) @map("total_score")
+  roundScores   Json     @default("[]") @map("round_scores")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([gameSessionId, userId])
+  @@map("player_scores")
+}
+
+model RoundGuess {
+  id             String   @id @default(uuid())
+  gameSessionId  String   @map("game_session_id")
+  userId         String   @map("user_id")
+  roundNumber    Int      @map("round_number")
+  guessedUserId  String?  @map("guessed_user_id")
+  isCorrect      Boolean  @default(false) @map("is_correct")
+  pointsEarned   Int      @default(0) @map("points_earned")
+  submittedAt    DateTime @default(now()) @map("submitted_at")
+
+  // Relations
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([gameSessionId, userId, roundNumber])
+  @@map("round_guesses")
+}
+
+// Enums
+enum LobbyStatus {
+  waiting
+  starting
+  in_progress
+  finished
+}
+
+enum GameSessionStatus {
+  preparing
+  playing
+  voting
+  results
+  finished
+}
