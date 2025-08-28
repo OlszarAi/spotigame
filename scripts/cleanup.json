@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "cleanup": "curl -X POST http://localhost:3000/api/lobbies/cleanup",
+    "cleanup-prod": "curl -X POST https://your-app.vercel.app/api/lobbies/cleanup"
+  }
+}

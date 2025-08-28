@@ -118,7 +118,7 @@ export async function POST(
           pusherServer.trigger(`game-${game.id}`, 'round-started', {
             round: nextRound
           })
-        }, 3000) // 3 second delay
+        }, 7000) // 5 second delay
       }
     }
 

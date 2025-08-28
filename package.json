@@ -10,7 +10,9 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:cleanup": "curl -X POST http://localhost:3000/api/lobbies/cleanup",
+    "db:cleanup-stats": "node scripts/cleanup-stats.js"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",

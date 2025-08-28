@@ -79,9 +79,9 @@ export async function POST(
     }
 
     // Collect tracks from all players
-    const allTracks: Array<{
-      track: any
-      ownerId: string
+    const playerTracks: Array<{
+      playerId: string
+      tracks: any[]
     }> = []
 
     for (const member of lobby.members) {
@@ -96,22 +96,13 @@ export async function POST(
           const validToken = await getValidAccessToken(spotifyAccount, prisma)
           
           if (validToken) {
-            const tracks = await getTopTracks(validToken, 20)
+            // Get top 50 tracks from last 4 weeks
+            const tracks = await getTopTracks(validToken, 50)
             
-            // Select random tracks for this user (up to roundCount)
-            const selectedTracks: any[] = []
-            for (let i = 0; i < Math.min(lobby.roundCount, tracks.length); i++) {
-              const randomTrack = selectRandomTrack(tracks.filter((t: any) => 
-                !selectedTracks.find((st: any) => st.id === t.id)
-              ))
-              if (randomTrack) {
-                selectedTracks.push(randomTrack)
-                allTracks.push({
-                  track: randomTrack,
-                  ownerId: memberWithUser.userId
-                })
-              }
-            }
+            playerTracks.push({
+              playerId: memberWithUser.userId,
+              tracks: tracks
+            })
           } else {
             console.error(`Could not get valid token for user ${memberWithUser.userId}`)
           }
@@ -123,9 +114,79 @@ export async function POST(
       }
     }
 
-    // Shuffle all tracks and take up to roundCount
-    const shuffledTracks = allTracks.sort(() => Math.random() - 0.5)
-    const gameTracks = shuffledTracks.slice(0, lobby.roundCount)
+    // Check if we have tracks from all players
+    if (playerTracks.length !== lobby.members.length) {
+      return NextResponse.json({ 
+        error: 'Could not fetch tracks from all players. Please ensure all players have valid Spotify connections and try again.' 
+      }, { status: 400 })
+    }
+
+    // Calculate fair distribution - each player gets proportional number of songs
+    const totalRounds = lobby.roundCount
+    const numberOfPlayers = playerTracks.length
+    const songsPerPlayer = Math.floor(totalRounds / numberOfPlayers)
+    const remainingSongs = totalRounds % numberOfPlayers
+
+    console.log(`Fair distribution: ${songsPerPlayer} songs per player, ${remainingSongs} extra songs`)
+
+    // Select tracks with fair distribution and no duplicates
+    const selectedTracks: Array<{
+      track: any
+      ownerId: string
+    }> = []
+    const usedTrackIds = new Set<string>()
+
+    // First, give each player their fair share
+    for (let i = 0; i < numberOfPlayers; i++) {
+      const playerData = playerTracks[i]
+      const playerSongCount = songsPerPlayer + (i < remainingSongs ? 1 : 0) // Distribute remaining songs to first players
+      
+      let selectedForPlayer = 0
+      let trackIndex = 0
+      
+      while (selectedForPlayer < playerSongCount && trackIndex < playerData.tracks.length) {
+        const track = playerData.tracks[trackIndex]
+        
+        // Check if this track ID is already used
+        if (!usedTrackIds.has(track.id)) {
+          selectedTracks.push({
+            track: track,
+            ownerId: playerData.playerId
+          })
+          usedTrackIds.add(track.id)
+          selectedForPlayer++
+        }
+        
+        trackIndex++
+      }
+      
+      console.log(`Player ${i + 1} got ${selectedForPlayer} songs out of ${playerSongCount} requested`)
+    }
+
+    // If we still don't have enough tracks (due to duplicates), try to fill from any player
+    if (selectedTracks.length < totalRounds) {
+      console.log(`Need ${totalRounds - selectedTracks.length} more tracks, trying to fill from any player`)
+      
+      for (const playerData of playerTracks) {
+        if (selectedTracks.length >= totalRounds) break
+        
+        for (const track of playerData.tracks) {
+          if (selectedTracks.length >= totalRounds) break
+          
+          if (!usedTrackIds.has(track.id)) {
+            selectedTracks.push({
+              track: track,
+              ownerId: playerData.playerId
+            })
+            usedTrackIds.add(track.id)
+          }
+        }
+      }
+    }
+
+    // Shuffle the selected tracks for random order
+    const shuffledTracks = selectedTracks.sort(() => Math.random() - 0.5)
+    const gameTracks = shuffledTracks.slice(0, totalRounds)
 
     // Check if we have enough tracks
     if (gameTracks.length === 0) {
@@ -134,9 +195,16 @@ export async function POST(
       }, { status: 400 })
     }
 
-    if (gameTracks.length < lobby.roundCount) {
-      console.warn(`Only ${gameTracks.length} tracks found, but ${lobby.roundCount} rounds requested`)
+    if (gameTracks.length < totalRounds) {
+      console.warn(`Only ${gameTracks.length} unique tracks found, but ${totalRounds} rounds requested`)
     }
+
+    console.log(`Final track distribution:`)
+    const distributionCount: Record<string, number> = {}
+    gameTracks.forEach(({ ownerId }) => {
+      distributionCount[ownerId] = (distributionCount[ownerId] || 0) + 1
+    })
+    console.log(distributionCount)
 
     // Create rounds
     for (let i = 0; i < gameTracks.length; i++) {

@@ -44,6 +44,9 @@ export default function GamePage({ params }: { params: { id: string } }) {
   const [timeLeft, setTimeLeft] = useState<number>(30)
   const [hasVoted, setHasVoted] = useState(false)
   const [showResults, setShowResults] = useState(false)
+  const [breakTimeLeft, setBreakTimeLeft] = useState<number>(0)
+  const [isInBreak, setIsInBreak] = useState(false)
+  const [roundOwnerName, setRoundOwnerName] = useState<string>('')
   const [loading, setLoading] = useState(true)
 
   const fetchGame = async () => {
@@ -93,6 +96,8 @@ export default function GamePage({ params }: { params: { id: string } }) {
       setHasVoted(false)
       setSelectedPlayerId(null)
       setShowResults(false)
+      setIsInBreak(false)
+      setBreakTimeLeft(0)
       
       // Check if user has already voted for this round
       checkIfUserHasVoted(data.round.id)
@@ -103,6 +108,15 @@ export default function GamePage({ params }: { params: { id: string } }) {
     channel.bind('round-ended', (data: { results: any }) => {
       setShowResults(true)
       setTimeLeft(0)
+      
+      // Find the round owner name
+      const ownerName = game.participants.find((p: any) => p.user.id === data.results.correctAnswer)?.user.name || 'Unknown'
+      setRoundOwnerName(ownerName)
+      
+      // Start 5-second break
+      setIsInBreak(true)
+      setBreakTimeLeft(5)
+      
       // Fetch updated game state to get new scores
       fetchGame()
     })
@@ -138,6 +152,23 @@ export default function GamePage({ params }: { params: { id: string } }) {
       return () => clearInterval(timer)
     }
   }, [timeLeft, currentRound, hasVoted, showResults, selectedPlayerId])
+
+  // Break timer countdown
+  useEffect(() => {
+    if (isInBreak && breakTimeLeft > 0) {
+      const timer = setInterval(() => {
+        setBreakTimeLeft((prev: number) => {
+          const newValue = prev - 1
+          if (newValue <= 0) {
+            return 0
+          }
+          return newValue
+        })
+      }, 1000)
+
+      return () => clearInterval(timer)
+    }
+  }, [isInBreak, breakTimeLeft])
 
   const endRound = async () => {
     try {
@@ -288,37 +319,68 @@ export default function GamePage({ params }: { params: { id: string } }) {
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-spotify-green">
-              Round {currentRound.roundNumber} of {game.totalRounds}
-            </h1>
-            <p className="text-spotify-gray">Whose favorite song is this?</p>
+            {isInBreak ? (
+              <>
+                <h1 className="text-2xl font-bold text-spotify-green">
+                  Round {currentRound.roundNumber} Finished
+                </h1>
+                <p className="text-spotify-gray">Preparing next round...</p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-2xl font-bold text-spotify-green">
+                  Round {currentRound.roundNumber} of {game.totalRounds}
+                </h1>
+                <p className="text-spotify-gray">Whose favorite song is this?</p>
+              </>
+            )}
           </div>
           <div className="text-center">
-            <div className={`text-3xl font-bold ${timeLeft <= 10 ? 'text-red-500' : 'text-spotify-green'}`}>
-              {timeLeft}s
-            </div>
-            <p className="text-sm text-spotify-gray">Time left</p>
+            {isInBreak && breakTimeLeft > 0 ? (
+              <>
+                <div className="text-3xl font-bold text-spotify-green">
+                  {breakTimeLeft}s
+                </div>
+                <p className="text-sm text-spotify-gray">Next round</p>
+              </>
+            ) : !isInBreak ? (
+              <>
+                <div className={`text-3xl font-bold ${timeLeft <= 10 ? 'text-red-500' : 'text-spotify-green'}`}>
+                  {timeLeft}s
+                </div>
+                <p className="text-sm text-spotify-gray">Time left</p>
+              </>
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-spotify-gray">
+                  ⏳
+                </div>
+                <p className="text-sm text-spotify-gray">Loading...</p>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Spotify Embed */}
-        <div className="card mb-6">
-          <h2 className="text-xl font-semibold mb-4">
-            {currentRound.trackName} - {currentRound.trackArtist}
-          </h2>
-          <iframe
-            src={getSpotifyEmbedUrl(currentRound.trackUri)}
-            width="100%"
-            height="352"
-            frameBorder="0"
-            allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-            loading="lazy"
-            className="rounded-lg"
-          />
-        </div>
+        {/* Spotify Embed - Hidden during break */}
+        {!isInBreak && (
+          <div className="card mb-6">
+            <h2 className="text-xl font-semibold mb-4">
+              {currentRound.trackName} - {currentRound.trackArtist}
+            </h2>
+            <iframe
+              src={getSpotifyEmbedUrl(currentRound.trackUri)}
+              width="100%"
+              height="352"
+              frameBorder="0"
+              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+              loading="lazy"
+              className="rounded-lg"
+            />
+          </div>
+        )}
 
-        {/* Player Selection */}
-        {!hasVoted && !showResults && (
+        {/* Player Selection - Hidden during break */}
+        {!hasVoted && !showResults && !isInBreak && (
           <div className="card">
             <h2 className="text-xl font-semibold mb-4">Who do you think this song belongs to?</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -357,8 +419,8 @@ export default function GamePage({ params }: { params: { id: string } }) {
           </div>
         )}
 
-        {/* Waiting for others */}
-        {hasVoted && !showResults && (
+        {/* Waiting for others - Hidden during break */}
+        {hasVoted && !showResults && !isInBreak && (
           <div className="card text-center">
             <h2 className="text-xl font-semibold mb-4">Vote submitted!</h2>
             <p className="text-spotify-gray">Waiting for other players to vote...</p>
@@ -366,19 +428,40 @@ export default function GamePage({ params }: { params: { id: string } }) {
           </div>
         )}
 
-        {/* Round Results */}
+        {/* Round Results & Break */}
         {showResults && (
           <div className="card">
             <h2 className="text-xl font-semibold mb-4">Round Results</h2>
             <p className="text-lg mb-4">
               This song belongs to: <span className="text-spotify-green font-bold">
-                {game.participants.find((p: any) => p.user.id === currentRound.ownerId)?.user.name}
+                {roundOwnerName}
               </span>
             </p>
-            {/* Results details would go here */}
-            <div className="text-center mt-6">
-              <p className="text-spotify-gray">Next round starting soon...</p>
-            </div>
+            
+            {isInBreak ? (
+              <div className="text-center mt-6">
+                {breakTimeLeft > 0 ? (
+                  <>
+                    <div className="text-6xl font-bold text-spotify-green mb-4">
+                      {breakTimeLeft}
+                    </div>
+                    <p className="text-lg text-spotify-gray">Next round starting in...</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-4xl font-bold text-spotify-green mb-4">
+                      0
+                    </div>
+                    <p className="text-lg text-spotify-gray">Starting next round...</p>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="text-center mt-6">
+                <p className="text-spotify-gray">Starting next round...</p>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-spotify-green mx-auto mt-4"></div>
+              </div>
+            )}
           </div>
         )}
       </div>

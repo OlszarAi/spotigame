@@ -59,11 +59,51 @@ export async function POST(
           data: { hostId: remainingMembers[0].userId }
         })
       } else {
-        // No members left, deactivate lobby
-        await prisma.lobby.update({
-          where: { id: lobby.id },
-          data: { isActive: false }
+        // No members left - clean up the entire lobby
+        // First clean up any ongoing games
+        const ongoingGames = await prisma.game.findMany({
+          where: { 
+            lobbyId: lobby.id,
+            status: { in: ['WAITING', 'LOADING', 'PLAYING'] }
+          },
+          include: {
+            rounds: true,
+            participants: true
+          }
         })
+
+        // Clean up games if any
+        for (const game of ongoingGames) {
+          // Delete votes for all rounds
+          for (const round of game.rounds) {
+            await prisma.vote.deleteMany({
+              where: { roundId: round.id }
+            })
+          }
+          
+          // Delete rounds
+          await prisma.round.deleteMany({
+            where: { gameId: game.id }
+          })
+          
+          // Delete participants
+          await prisma.gameParticipant.deleteMany({
+            where: { gameId: game.id }
+          })
+          
+          // Delete game
+          await prisma.game.delete({
+            where: { id: game.id }
+          })
+        }
+
+        // Delete the lobby completely
+        await prisma.lobby.delete({
+          where: { id: lobby.id }
+        })
+
+        console.log(`Cleaned up empty lobby: ${lobby.name} (${lobby.id})`)
+        return NextResponse.json({ success: true, lobbyDeleted: true })
       }
     }
 

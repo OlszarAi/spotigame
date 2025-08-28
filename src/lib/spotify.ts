@@ -82,10 +82,10 @@ export async function getValidAccessToken(account: any, prisma: any): Promise<st
   }
 }
 
-export async function getTopTracks(accessToken: string, limit: number = 20): Promise<SpotifyTrack[]> {
+export async function getTopTracks(accessToken: string, limit: number = 50): Promise<SpotifyTrack[]> {
   try {
     const response = await fetch(
-      `https://api.spotify.com/v1/me/top/tracks?limit=${limit}&time_range=medium_term`,
+      `https://api.spotify.com/v1/me/top/tracks?limit=${limit}&time_range=short_term`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
