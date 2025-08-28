@@ -38,6 +38,10 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
   const [loading, setLoading] = useState(true)
   const [isReady, setIsReady] = useState(false)
   const [gameStarting, setGameStarting] = useState(false)
+  const [isEditingSettings, setIsEditingSettings] = useState(false)
+  const [tempMaxPlayers, setTempMaxPlayers] = useState(8)
+  const [tempRoundCount, setTempRoundCount] = useState(5)
+  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false)
 
   console.log('LobbyPage render - status:', status, 'loading:', loading, 'session:', !!session)
   if (session) {
@@ -143,6 +147,14 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
       router.push(`/game/${data.gameId}`)
     })
 
+    channel.bind('lobby-settings-updated', (data: { lobby: Lobby, changes: any }) => {
+      console.log('Lobby settings updated:', data)
+      setLobby(data.lobby)
+      if (isEditingSettings) {
+        setIsEditingSettings(false)
+      }
+    })
+
     return () => {
       pusherClient.unsubscribe(`lobby-${lobby.id}`)
     }
@@ -195,6 +207,55 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
     } catch (error) {
       console.error('Error leaving lobby:', error)
       router.push('/dashboard')
+    }
+  }
+
+  const updateLobbySettings = async () => {
+    if (!lobby || !session?.user?.id) return
+
+    setIsUpdatingSettings(true)
+    try {
+      const response = await fetch(`/api/lobbies/${lobby.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          maxPlayers: tempMaxPlayers,
+          roundCount: tempRoundCount,
+        }),
+      })
+
+      if (response.ok) {
+        const updatedLobby = await response.json()
+        setLobby(updatedLobby)
+        setIsEditingSettings(false)
+      } else {
+        const errorData = await response.json()
+        console.error('Failed to update lobby settings:', errorData.error)
+        alert(errorData.error || 'Failed to update lobby settings')
+      }
+    } catch (error) {
+      console.error('Error updating lobby settings:', error)
+      alert('Error updating lobby settings')
+    } finally {
+      setIsUpdatingSettings(false)
+    }
+  }
+
+  const handleEditSettings = () => {
+    if (lobby) {
+      setTempMaxPlayers(lobby.maxPlayers)
+      setTempRoundCount(lobby.roundCount)
+      setIsEditingSettings(true)
+    }
+  }
+
+  const cancelEditSettings = () => {
+    setIsEditingSettings(false)
+    if (lobby) {
+      setTempMaxPlayers(lobby.maxPlayers)
+      setTempRoundCount(lobby.roundCount)
     }
   }
 
@@ -289,45 +350,110 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
           {/* Controls */}
           <div className="card">
             <h2 className="text-xl font-semibold mb-4">Game Settings</h2>
-            <div className="space-y-4">
-              <div>
-                <p className="text-spotify-gray">Rounds: {lobby.roundCount}</p>
-                <p className="text-spotify-gray">Max Players: {lobby.maxPlayers}</p>
-              </div>
+            
+            {!isEditingSettings ? (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-spotify-gray">Rounds: {lobby.roundCount}</p>
+                    <p className="text-spotify-gray">Max Players: {lobby.maxPlayers}</p>
+                  </div>
+                  {isHost && (
+                    <button
+                      onClick={handleEditSettings}
+                      disabled={gameStarting}
+                      className="btn-secondary text-sm px-3 py-1"
+                    >
+                      Edit Settings
+                    </button>
+                  )}
+                </div>
 
-              <div className="space-y-3">
-                <button
-                  onClick={toggleReady}
-                  disabled={gameStarting}
-                  className={`w-full py-3 px-6 rounded-lg font-semibold transition-colors ${
-                    isReady
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : 'bg-green-600 hover:bg-green-700 text-white'
-                  }`}
-                >
-                  {isReady ? 'Not Ready' : 'Ready'}
-                </button>
-
-                {isHost && (
+                <div className="space-y-3">
                   <button
-                    onClick={startGame}
-                    disabled={!canStart || gameStarting}
-                    className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={toggleReady}
+                    disabled={gameStarting}
+                    className={`w-full py-3 px-6 rounded-lg font-semibold transition-colors ${
+                      isReady
+                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                        : 'bg-green-600 hover:bg-green-700 text-white'
+                    }`}
                   >
-                    {gameStarting ? 'Starting...' : 'Start Game'}
+                    {isReady ? 'Not Ready' : 'Ready'}
                   </button>
-                )}
 
-                {!canStart && isHost && (
-                  <p className="text-sm text-spotify-gray text-center">
-                    {lobby.members.length < 2 
-                      ? 'Need at least 2 players to start'
-                      : 'All players must be ready to start'
-                    }
-                  </p>
-                )}
+                  {isHost && (
+                    <button
+                      onClick={startGame}
+                      disabled={!canStart || gameStarting}
+                      className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {gameStarting ? 'Starting...' : 'Start Game'}
+                    </button>
+                  )}
+
+                  {!canStart && isHost && (
+                    <p className="text-sm text-spotify-gray text-center">
+                      {lobby.members.length < 2 
+                        ? 'Need at least 2 players to start'
+                        : 'All players must be ready to start'
+                      }
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <div>
+                    <label htmlFor="maxPlayers" className="block text-sm font-medium mb-2">
+                      Max Players ({lobby.members.length} currently in lobby)
+                    </label>
+                    <input
+                      type="number"
+                      id="maxPlayers"
+                      min={Math.max(2, lobby.members.length)}
+                      max="12"
+                      value={tempMaxPlayers}
+                      onChange={(e) => setTempMaxPlayers(parseInt(e.target.value))}
+                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="roundCount" className="block text-sm font-medium mb-2">
+                      Number of Rounds
+                    </label>
+                    <input
+                      type="number"
+                      id="roundCount"
+                      min="1"
+                      max="20"
+                      value={tempRoundCount}
+                      onChange={(e) => setTempRoundCount(parseInt(e.target.value))}
+                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={updateLobbySettings}
+                    disabled={isUpdatingSettings}
+                    className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUpdatingSettings ? 'Saving...' : 'Save Changes'}
+                  </button>
+                  <button
+                    onClick={cancelEditSettings}
+                    disabled={isUpdatingSettings}
+                    className="btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

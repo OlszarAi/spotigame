@@ -9,12 +9,19 @@ export default function Dashboard() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const [isCreatingLobby, setIsCreatingLobby] = useState(false)
+  const [showCreateForm, setShowCreateForm] = useState(false)
+  const [lobbyName, setLobbyName] = useState('')
+  const [maxPlayers, setMaxPlayers] = useState(8)
+  const [roundCount, setRoundCount] = useState(5)
 
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/')
     }
-  }, [status, router])
+    if (session?.user?.name) {
+      setLobbyName(`${session.user.name}'s Game`)
+    }
+  }, [status, router, session?.user?.name])
 
   if (status === 'loading') {
     return (
@@ -32,6 +39,34 @@ export default function Dashboard() {
   }
 
   const createLobby = async () => {
+    setIsCreatingLobby(true)
+    try {
+      const response = await fetch('/api/lobbies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: lobbyName || `${session.user.name}'s Game`,
+          maxPlayers,
+          roundCount,
+        }),
+      })
+
+      if (response.ok) {
+        const lobby = await response.json()
+        router.push(`/lobby/${lobby.id}`)
+      } else {
+        console.error('Failed to create lobby')
+      }
+    } catch (error) {
+      console.error('Error creating lobby:', error)
+    } finally {
+      setIsCreatingLobby(false)
+    }
+  }
+
+  const quickCreateLobby = async () => {
     setIsCreatingLobby(true)
     try {
       const response = await fetch('/api/lobbies', {
@@ -83,13 +118,86 @@ export default function Dashboard() {
             <p className="text-spotify-gray mb-4">
               Start a new lobby and invite your friends to guess your favorite tracks!
             </p>
-            <button
-              onClick={createLobby}
-              disabled={isCreatingLobby}
-              className="btn-primary w-full"
-            >
-              {isCreatingLobby ? 'Creating...' : 'Create Lobby'}
-            </button>
+            
+            {!showCreateForm ? (
+              <div className="space-y-2">
+                <button
+                  onClick={quickCreateLobby}
+                  disabled={isCreatingLobby}
+                  className="btn-primary w-full"
+                >
+                  {isCreatingLobby ? 'Creating...' : 'Quick Create (8 players, 5 rounds)'}
+                </button>
+                <button
+                  onClick={() => setShowCreateForm(true)}
+                  className="btn-secondary w-full"
+                >
+                  Custom Settings
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="lobbyName" className="block text-sm font-medium mb-2">
+                    Lobby Name (optional)
+                  </label>
+                  <input
+                    type="text"
+                    id="lobbyName"
+                    value={lobbyName}
+                    onChange={(e) => setLobbyName(e.target.value)}
+                    placeholder={`${session.user.name}'s Game`}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-400 focus:border-spotify-green focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="maxPlayers" className="block text-sm font-medium mb-2">
+                    Max Players
+                  </label>
+                  <input
+                    type="number"
+                    id="maxPlayers"
+                    min="2"
+                    max="12"
+                    value={maxPlayers}
+                    onChange={(e) => setMaxPlayers(parseInt(e.target.value))}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="roundCount" className="block text-sm font-medium mb-2">
+                    Number of Rounds
+                  </label>
+                  <input
+                    type="number"
+                    id="roundCount"
+                    min="1"
+                    max="20"
+                    value={roundCount}
+                    onChange={(e) => setRoundCount(parseInt(e.target.value))}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={createLobby}
+                    disabled={isCreatingLobby}
+                    className="btn-primary flex-1"
+                  >
+                    {isCreatingLobby ? 'Creating...' : 'Create Lobby'}
+                  </button>
+                  <button
+                    onClick={() => setShowCreateForm(false)}
+                    className="btn-secondary flex-1"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="card">
