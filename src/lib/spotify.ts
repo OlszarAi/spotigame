@@ -20,8 +20,10 @@ async function getPreviewUrl(trackId: string, artistName: string, trackName: str
     // Try the spotify-preview-finder package first
     const previewUrl = await spotifyPreviewFinder(trackId)
     if (previewUrl) {
-      console.log(`Found preview URL for "${trackName}" by ${artistName}: ${previewUrl}`)
-      return previewUrl
+      // Make sure we get the URL string, not an object
+      const urlString = typeof previewUrl === 'string' ? previewUrl : previewUrl.url || previewUrl.toString()
+      console.log(`Found preview URL for "${trackName}" by ${artistName}: ${urlString}`)
+      return urlString
     }
     
     // Alternative: construct potential preview URL based on track ID
