@@ -2,20 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { findLobbyByIdOrCode } from '@/lib/lobby-utils'
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const lobby = await prisma.lobby.findUnique({
-      where: { id: params.id },
-      include: {
-        host: true,
-        members: {
-          include: {
-            user: true
-          }
+    const lobby = await findLobbyByIdOrCode(params.id, {
+      host: true,
+      members: {
+        include: {
+          user: true
         }
       }
     })

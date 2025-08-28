@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/lib/pusher'
 import { getTopTracks, selectRandomTrack } from '@/lib/spotify'
+import { findLobbyByIdOrCode } from '@/lib/lobby-utils'
 
 export async function POST(
   req: NextRequest,
@@ -25,15 +26,12 @@ export async function POST(
     }
 
     // Find lobby and verify user is host
-    const lobby = await prisma.lobby.findUnique({
-      where: { id: params.id },
-      include: {
-        members: {
-          include: {
-            user: {
-              include: {
-                accounts: true
-              }
+    const lobby = await findLobbyByIdOrCode(params.id, {
+      members: {
+        include: {
+          user: {
+            include: {
+              accounts: true
             }
           }
         }
@@ -75,7 +73,7 @@ export async function POST(
       await prisma.gameParticipant.create({
         data: {
           gameId: game.id,
-          userId: member.userId
+          userId: (member as any).userId
         }
       })
     }
@@ -87,7 +85,8 @@ export async function POST(
     }> = []
 
     for (const member of lobby.members) {
-      const spotifyAccount = member.user.accounts.find(
+      const memberWithUser = member as any;
+      const spotifyAccount = memberWithUser.user.accounts.find(
         (account: any) => account.provider === 'spotify'
       )
 
@@ -105,12 +104,12 @@ export async function POST(
               selectedTracks.push(randomTrack)
               allTracks.push({
                 track: randomTrack,
-                ownerId: member.userId
+                ownerId: memberWithUser.userId
               })
             }
           }
         } catch (error) {
-          console.error(`Error fetching tracks for user ${member.userId}:`, error)
+          console.error(`Error fetching tracks for user ${memberWithUser.userId}:`, error)
         }
       }
     }

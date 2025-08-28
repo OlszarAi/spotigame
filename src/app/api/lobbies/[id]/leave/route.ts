@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/lib/pusher'
+import { findLobbyByIdOrCode } from '@/lib/lobby-utils'
 
 export async function POST(
   req: NextRequest,
@@ -24,11 +25,8 @@ export async function POST(
     }
 
     // Find lobby
-    const lobby = await prisma.lobby.findUnique({
-      where: { id: params.id },
-      include: {
-        members: true
-      }
+    const lobby = await findLobbyByIdOrCode(params.id, {
+      members: true
     })
 
     if (!lobby) {

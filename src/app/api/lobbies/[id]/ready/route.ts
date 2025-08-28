@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/lib/pusher'
+import { findLobbyByIdOrCode } from '@/lib/lobby-utils'
 
 export async function POST(
   req: NextRequest,
@@ -25,12 +26,19 @@ export async function POST(
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
+    // Find lobby to get the actual ID
+    const lobby = await findLobbyByIdOrCode(params.id)
+    
+    if (!lobby) {
+      return NextResponse.json({ error: 'Lobby not found' }, { status: 404 })
+    }
+
     // Update ready status
     const updatedMember = await prisma.lobbyMember.update({
       where: {
         userId_lobbyId: {
           userId: user.id,
-          lobbyId: params.id
+          lobbyId: lobby.id
         }
       },
       data: { isReady },
@@ -40,7 +48,7 @@ export async function POST(
     })
 
     // Trigger Pusher event
-    await pusherServer.trigger(`lobby-${params.id}`, 'member-ready-changed', {
+    await pusherServer.trigger(`lobby-${lobby.id}`, 'member-ready-changed', {
       userId: user.id,
       isReady
     })
