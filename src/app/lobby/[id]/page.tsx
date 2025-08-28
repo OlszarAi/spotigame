@@ -30,6 +30,8 @@ interface Lobby {
 }
 
 export default function LobbyPage({ params }: { params: { id: string } }) {
+  console.log('LobbyPage component loaded with params:', params)
+  
   const { data: session, status } = useSession()
   const router = useRouter()
   const [lobby, setLobby] = useState<Lobby | null>(null)
@@ -37,17 +39,34 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
   const [isReady, setIsReady] = useState(false)
   const [gameStarting, setGameStarting] = useState(false)
 
+  console.log('LobbyPage render - status:', status, 'loading:', loading, 'session:', !!session)
+  if (session) {
+    console.log('Session details:', { 
+      user: session.user, 
+      hasUserId: !!session.user?.id,
+      userKeys: Object.keys(session.user || {})
+    })
+  }
+
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/')
       return
     }
 
+    if (status === 'loading') {
+      return // Wait for session to load
+    }
+
     const fetchLobby = async () => {
       try {
+        console.log('Fetching lobby:', params.id)
         const response = await fetch(`/api/lobbies/${params.id}`)
+        console.log('Response status:', response.status)
+        
         if (response.ok) {
           const lobbyData = await response.json()
+          console.log('Lobby data:', lobbyData)
           setLobby(lobbyData)
           
           // Check if current user is ready
@@ -56,6 +75,7 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
           )
           setIsReady(currentMember?.isReady || false)
         } else {
+          console.error('Failed to fetch lobby, redirecting to dashboard')
           router.push('/dashboard')
         }
       } catch (error) {
@@ -67,17 +87,23 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
     }
 
     if (session?.user?.id) {
+      console.log('Session user ID found:', session.user.id, 'Starting fetchLobby')
       fetchLobby()
+    } else {
+      console.log('No session user ID found. Session:', session)
     }
   }, [session, params.id, router, status])
 
   useEffect(() => {
     if (!lobby) return
 
+    console.log('Setting up Pusher subscription for lobby:', lobby.id)
+    
     // Subscribe to lobby updates
     const channel = pusherClient.subscribe(`lobby-${lobby.id}`)
     
     channel.bind('member-joined', (data: { member: LobbyMember }) => {
+      console.log('Member joined:', data)
       setLobby(prev => prev ? {
         ...prev,
         members: [...prev.members, data.member]
@@ -85,6 +111,7 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
     })
     
     channel.bind('member-left', (data: { userId: string }) => {
+      console.log('Member left:', data)
       setLobby(prev => prev ? {
         ...prev,
         members: prev.members.filter(member => member.userId !== data.userId)
@@ -92,6 +119,7 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
     })
     
     channel.bind('member-ready-changed', (data: { userId: string, isReady: boolean }) => {
+      console.log('Member ready changed:', data)
       setLobby(prev => prev ? {
         ...prev,
         members: prev.members.map(member => 
@@ -107,6 +135,7 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
     })
     
     channel.bind('game-starting', () => {
+      console.log('Game starting')
       setGameStarting(true)
     })
     
@@ -169,7 +198,7 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
     }
   }
 
-  if (loading) {
+  if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

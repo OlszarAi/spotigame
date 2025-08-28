@@ -49,12 +49,25 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    // Trigger Pusher event
-    await pusherServer.trigger('lobbies', 'lobby-created', {
-      lobby
+    // Fetch lobby with updated members
+    const updatedLobby = await prisma.lobby.findUnique({
+      where: { id: lobby.id },
+      include: {
+        host: true,
+        members: {
+          include: {
+            user: true
+          }
+        }
+      }
     })
 
-    return NextResponse.json(lobby)
+    // Trigger Pusher event
+    await pusherServer.trigger('lobbies', 'lobby-created', {
+      lobby: updatedLobby
+    })
+
+    return NextResponse.json(updatedLobby)
   } catch (error) {
     console.error('Error creating lobby:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

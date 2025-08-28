@@ -32,6 +32,9 @@ export const authOptions: NextAuthOptions = {
       
       // Jeśli używamy database sessions, tokeny są w account
       if (user?.id) {
+        // Add user id to session
+        session.user.id = user.id
+        
         try {
           // Pobierz konto Spotify dla tego użytkownika
           const account = await prisma.account.findFirst({
