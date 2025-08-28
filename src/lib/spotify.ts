@@ -54,6 +54,19 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
     const spotifyApi = new SpotifyWebApi()
     spotifyApi.setAccessToken(accessToken)
 
+    console.log(`Starting track fetch for user ${userId}`)
+    
+    // First, let's test with a specific popular track to see the response format
+    try {
+      const testSearch = await spotifyApi.searchTracks('Blinding Lights The Weeknd', { limit: 1 })
+      if (testSearch.body.tracks && testSearch.body.tracks.items.length > 0) {
+        const testTrack = testSearch.body.tracks.items[0]
+        console.log(`TEST TRACK - Name: "${testTrack.name}", Preview: ${testTrack.preview_url || 'NULL'}, Full object:`, JSON.stringify(testTrack, null, 2))
+      }
+    } catch (testError) {
+      console.log('Test search failed:', testError)
+    }
+
     // Try multiple time ranges to get more tracks with previews
     const timeRanges = ['short_term', 'medium_term', 'long_term'] as const
     let allTracks: SpotifyTrack[] = []
@@ -65,17 +78,20 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
           limit: 50 // Spotify API maximum limit is 50
         })
 
-        const tracks = response.body.items.map(track => ({
-          id: track.id,
-          name: track.name,
-          artists: track.artists.map(artist => ({ name: artist.name })),
-          preview_url: track.preview_url,
-          external_urls: track.external_urls,
-          album: {
-            name: track.album.name,
-            images: track.album.images
+        const tracks = response.body.items.map(track => {
+          console.log(`Track: "${track.name}" by ${track.artists[0]?.name} - preview_url: ${track.preview_url || 'NULL'}`)
+          return {
+            id: track.id,
+            name: track.name,
+            artists: track.artists.map(artist => ({ name: artist.name })),
+            preview_url: track.preview_url,
+            external_urls: track.external_urls,
+            album: {
+              name: track.album.name,
+              images: track.album.images
+            }
           }
-        }))
+        })
 
         allTracks = [...allTracks, ...tracks]
         
@@ -99,7 +115,42 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
     const tracksWithPreviews = uniqueTracks.filter(track => track.preview_url)
     console.log(`User ${userId}: ${tracksWithPreviews.length} tracks have preview URLs`)
 
-    return uniqueTracks
+    // If we don't have enough tracks with previews from top tracks, try recently played
+    if (tracksWithPreviews.length < 10) {
+      console.log(`User ${userId}: Trying recently played tracks as fallback...`)
+      try {
+        const recentResponse = await spotifyApi.getMyRecentlyPlayedTracks({ limit: 50 })
+        const recentTracks = recentResponse.body.items.map(item => {
+          const track = item.track
+          console.log(`Recent Track: "${track.name}" by ${track.artists[0]?.name} - preview_url: ${track.preview_url || 'NULL'}`)
+          return {
+            id: track.id,
+            name: track.name,
+            artists: track.artists.map(artist => ({ name: artist.name })),
+            preview_url: track.preview_url,
+            external_urls: track.external_urls,
+            album: {
+              name: track.album.name,
+              images: track.album.images
+            }
+          }
+        })
+        
+        // Add recent tracks that aren't already in our collection
+        const newRecentTracks = recentTracks.filter(recent => 
+          !uniqueTracks.some(existing => existing.id === recent.id)
+        )
+        
+        allTracks = [...uniqueTracks, ...newRecentTracks]
+        console.log(`User ${userId}: Added ${newRecentTracks.length} new tracks from recently played`)
+      } catch (recentError) {
+        console.log(`Failed to fetch recently played tracks for user ${userId}:`, recentError)
+      }
+    } else {
+      allTracks = uniqueTracks
+    }
+
+    return allTracks
   } catch (error: unknown) {
     // If token is expired and we have refresh token, try to refresh
     const spotifyError = error as { statusCode?: number }
@@ -117,17 +168,20 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
             limit: 50
           })
 
-          return response.body.items.map(track => ({
-            id: track.id,
-            name: track.name,
-            artists: track.artists.map(artist => ({ name: artist.name })),
-            preview_url: track.preview_url,
-            external_urls: track.external_urls,
-            album: {
-              name: track.album.name,
-              images: track.album.images
+          return response.body.items.map(track => {
+            console.log(`Retry Track: "${track.name}" by ${track.artists[0]?.name} - preview_url: ${track.preview_url || 'NULL'}`)
+            return {
+              id: track.id,
+              name: track.name,
+              artists: track.artists.map(artist => ({ name: artist.name })),
+              preview_url: track.preview_url,
+              external_urls: track.external_urls,
+              album: {
+                name: track.album.name,
+                images: track.album.images
+              }
             }
-          }))
+          })
         } catch (retryError) {
           console.error('Error fetching top tracks after token refresh:', retryError)
           throw new Error('Failed to fetch Spotify tracks after token refresh')
