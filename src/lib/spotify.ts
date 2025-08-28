@@ -56,7 +56,7 @@ export interface UserTopTracks {
   tracks: SpotifyTrack[]
 }
 
-async function refreshSpotifyToken(userId: string, refreshToken: string): Promise<string | null> {
+export async function refreshSpotifyToken(userId: string, refreshToken: string): Promise<{accessToken: string, expiresAt: number} | null> {
   try {
     const spotifyApi = new SpotifyWebApi({
       clientId: process.env.SPOTIFY_CLIENT_ID!,
@@ -65,7 +65,8 @@ async function refreshSpotifyToken(userId: string, refreshToken: string): Promis
 
     spotifyApi.setRefreshToken(refreshToken)
     const data = await spotifyApi.refreshAccessToken()
-    const newAccessToken = data.body.access_token
+    const refreshedTokens = data.body
+    const newExpiresAt = Math.floor(Date.now() / 1000 + refreshedTokens.expires_in)
 
     // Update the access token in the database
     const { createClient } = await import('@supabase/supabase-js')
@@ -76,11 +77,19 @@ async function refreshSpotifyToken(userId: string, refreshToken: string): Promis
 
     await supabase
       .from('accounts')
-      .update({ access_token: newAccessToken })
+      .update({ 
+        access_token: refreshedTokens.access_token,
+        expires_at: newExpiresAt,
+        refresh_token: refreshedTokens.refresh_token ?? refreshToken
+      })
       .eq('userId', userId)
       .eq('provider', 'spotify')
 
-    return newAccessToken
+    console.log(`✅ Token refreshed for user ${userId}`)
+    return {
+      accessToken: refreshedTokens.access_token,
+      expiresAt: newExpiresAt
+    }
   } catch (error) {
     console.error('Error refreshing Spotify token:', error)
     return null
@@ -222,56 +231,14 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
     const spotifyError = error as { statusCode?: number }
     if (spotifyError?.statusCode === 401 && userId && refreshToken) {
       console.log(`Access token expired for user ${userId}, attempting to refresh...`)
-      const newAccessToken = await refreshSpotifyToken(userId, refreshToken)
+      const refreshResult = await refreshSpotifyToken(userId, refreshToken)
       
-      if (newAccessToken) {
-        // Retry with new token (simplified retry - just short_term for now)
-        const spotifyApi = new SpotifyWebApi()
-        spotifyApi.setAccessToken(newAccessToken)
-        try {
-          const response = await spotifyApi.getMyTopTracks({
-            time_range: 'short_term',
-            limit: 50
-          })
-
-          const tracks = response.body.items.map(track => {
-            console.log(`Retry Track: "${track.name}" by ${track.artists[0]?.name} - preview_url: ${track.preview_url || 'NULL'}`)
-            return {
-              id: track.id,
-              name: track.name,
-              artists: track.artists.map(artist => ({ name: artist.name })),
-              preview_url: track.preview_url,
-              external_urls: track.external_urls,
-              album: {
-                name: track.album.name,
-                images: track.album.images
-              }
-            }
-          })
-
-          // Apply workaround for missing preview URLs
-          const tracksWithWorkaroundPreviews = await Promise.all(
-            tracks.map(async (track) => {
-              if (!track.preview_url) {
-                const workaroundPreview = await getPreviewUrl(
-                  track.id,
-                  track.artists[0]?.name || 'Unknown',
-                  track.name
-                )
-                return {
-                  ...track,
-                  preview_url: workaroundPreview
-                }
-              }
-              return track
-            })
-          )
-
-          return tracksWithWorkaroundPreviews
-        } catch (retryError) {
-          console.error('Error fetching top tracks after token refresh:', retryError)
-          throw new Error('Failed to fetch Spotify tracks after token refresh')
-        }
+      if (refreshResult) {
+        // Retry with new token - full retry with all time ranges
+        console.log(`Retrying with refreshed token for user ${userId}`)
+        return await fetchUserTopTracks(refreshResult.accessToken, userId, refreshToken)
+      } else {
+        console.error(`Failed to refresh token for user ${userId}`)
       }
     }
     

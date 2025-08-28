@@ -63,7 +63,7 @@ export const authOptions = {
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async jwt({ token, account, user }: any) {
-      // Persist the OAuth access_token and refresh_token to the token right after signin
+      // Initial sign in
       if (account) {
         console.log('🔑 JWT Callback - Account data:', {
           provider: account.provider,
@@ -106,8 +106,68 @@ export const authOptions = {
         } catch (error) {
           console.error('❌ Error saving account to database:', error)
         }
+        
+        return token
       }
-      return token
+
+      // Return previous token if the access token has not expired yet
+      if (Date.now() < (token.expiresAt as number) * 1000) {
+        return token
+      }
+
+      // Access token has expired, try to update it
+      console.log('🔄 Access token expired, attempting to refresh...')
+      try {
+        const SpotifyWebApi = (await import('spotify-web-api-node')).default
+        const spotifyApi = new SpotifyWebApi({
+          clientId: process.env.SPOTIFY_CLIENT_ID!,
+          clientSecret: process.env.SPOTIFY_CLIENT_SECRET!,
+        })
+
+        spotifyApi.setRefreshToken(token.refreshToken as string)
+        const data = await spotifyApi.refreshAccessToken()
+        const refreshedTokens = data.body
+
+        console.log('✅ Token refreshed successfully')
+
+        // Update token in memory
+        const newToken = {
+          ...token,
+          accessToken: refreshedTokens.access_token,
+          expiresAt: Math.floor(Date.now() / 1000 + refreshedTokens.expires_in),
+          // Fall back to old refresh token if new one wasn't returned
+          refreshToken: refreshedTokens.refresh_token ?? token.refreshToken,
+        }
+
+        // Update the access token in the database
+        try {
+          const { createClient } = await import('@supabase/supabase-js')
+          const supabase = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!
+          )
+
+          await supabase
+            .from('accounts')
+            .update({ 
+              access_token: refreshedTokens.access_token,
+              expires_at: newToken.expiresAt,
+              refresh_token: refreshedTokens.refresh_token ?? token.refreshToken
+            })
+            .eq('userId', token.userId)
+            .eq('provider', 'spotify')
+
+          console.log('✅ Updated access token in database')
+        } catch (error) {
+          console.error('❌ Error updating token in database:', error)
+        }
+
+        return newToken
+      } catch (error) {
+        console.error('❌ Error refreshing access token:', error)
+        // Return the old token and try refreshing on the next call
+        return token
+      }
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     async session({ session, token }: any) {

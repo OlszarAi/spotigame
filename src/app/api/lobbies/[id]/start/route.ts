@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { fetchUserTopTracks, createTrackPool } from '@/lib/spotify'
+import { fetchUserTopTracks, createTrackPool, refreshSpotifyToken } from '@/lib/spotify'
 
 interface RouteParams {
   params: Promise<{
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         // Get user's access token and refresh token from the accounts table
         const { data: account, error: accountError } = await supabaseAdmin
           .from('accounts')
-          .select('access_token, refresh_token')
+          .select('access_token, refresh_token, expires_at')
           .eq('userId', player.user_id)
           .eq('provider', 'spotify')
           .single()
@@ -80,7 +80,29 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           continue
         }
 
-        const tracks = await fetchUserTopTracks(account.access_token, player.user_id, account.refresh_token)
+        // Check if token is expired and refresh if needed
+        let accessToken = account.access_token
+        const currentTime = Math.floor(Date.now() / 1000)
+        const tokenExpiresAt = account.expires_at || 0
+
+        if (currentTime >= tokenExpiresAt - 300) { // Refresh if expires within 5 minutes
+          console.log(`Token for user ${player.user_id} is expired or expiring soon, refreshing...`)
+          try {
+            const refreshResult = await refreshSpotifyToken(player.user_id, account.refresh_token)
+            if (refreshResult) {
+              accessToken = refreshResult.accessToken
+              console.log(`✅ Token refreshed for user ${player.user_id}`)
+            } else {
+              console.error(`❌ Failed to refresh token for user ${player.user_id}`)
+              continue
+            }
+          } catch (refreshError) {
+            console.error(`❌ Error refreshing token for user ${player.user_id}:`, refreshError)
+            continue
+          }
+        }
+
+        const tracks = await fetchUserTopTracks(accessToken, player.user_id, account.refresh_token)
         userTracks.push({
           userId: player.user_id,
           username: player.username,
