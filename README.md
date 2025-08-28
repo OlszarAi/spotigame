@@ -1,7 +1,5 @@
 # SpotiGame - Music Guessing Game
 
-Kompletnie przepisana aplikacja do gry w zgadywanie ulubionych utworów Spotify znajomych.
-
 ## 🏗️ Architektura
 
 ### Tech Stack
@@ -208,7 +206,7 @@ src/
 - [ ] Statystyki gracza
 - [ ] Historie gier
 - [ ] Custom playlist dla gier
-- [ ] Więcej trybów gry (różne długości utworów, różne źródła)
+- [ ] Więcej trybów gry (Artyści)(różne długości utworów, różne źródła, top utwory roku itp)
 
 ## 🐛 Debugowanie
 
@@ -227,16 +225,3 @@ vercel logs
 # Local development
 npm run dev
 ```
-
-## 🎯 Kluczowe funkcje
-
-✅ **Real-time lobby system**
-✅ **Spotify authentication & API**  
-✅ **Synchronizowana gra multiplayer**
-✅ **Prisma ORM z PostgreSQL**
-✅ **Pusher dla WebSockets (kompatybilne z Vercel)**
-✅ **TypeScript dla type safety**
-✅ **Responsive design z Tailwind**
-✅ **Professional architecture**
-
-Aplikacja jest gotowa do rozwoju i deploymentu! 🚀
