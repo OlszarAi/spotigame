@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-spotify-black text-spotify-white;
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-spotify-green hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors;
+  }
+  
+  .btn-secondary {
+    @apply bg-spotify-gray hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors;
+  }
+  
+  .card {
+    @apply bg-zinc-900 border border-zinc-800 rounded-lg p-6;
+  }
+}
