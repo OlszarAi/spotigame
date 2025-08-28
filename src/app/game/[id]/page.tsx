@@ -7,7 +7,7 @@ import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
 import { useSession } from 'next-auth/react'
 import { Session } from 'next-auth'
-import AudioPlayer from '@/components/audio-player-new'
+import SpotifyEmbedPlayer from '@/components/spotify-embed-player'
 
 interface Track {
   id: string
@@ -461,18 +461,12 @@ export default function GamePage() {
                       <p className="text-sm text-spotify-light-gray mt-1">
                         Track: &quot;{gameState.currentTrack.name}&quot; by {gameState.currentTrack.artists?.[0]?.name}
                       </p>
-                      {gameState.currentTrack.preview_url && (
-                        <p className="text-sm text-green-400 mt-1">✅ Preview URL available</p>
-                      )}
-                      {!gameState.currentTrack.preview_url && (
-                        <p className="text-sm text-red-400 mt-1">❌ No preview URL</p>
-                      )}
                     </div>
                   </div>
                 ) : (
-                  <AudioPlayer 
-                    src={gameState.currentTrack.preview_url}
-                    autoPlay={gameState.status === 'playing'}
+                  <SpotifyEmbedPlayer 
+                    trackId={gameState.currentTrack.id}
+                    height={152}
                     className="mb-8"
                   />
                 )}

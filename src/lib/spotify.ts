@@ -1,6 +1,4 @@
 import SpotifyWebApi from 'spotify-web-api-node'
-// @ts-expect-error - no types available for this package
-import spotifyPreviewFinder from 'spotify-preview-finder'
 
 export interface SpotifyTrack {
   id: string
@@ -28,77 +26,6 @@ interface SpotifyApiTrack {
 
 interface SpotifyApiRecentTrack {
   track: SpotifyApiTrack
-}
-
-// Function to get preview URL using multiple strategies
-async function getPreviewUrl(trackId: string, artistName: string, trackName: string): Promise<string | null> {
-  try {
-    // Strategy 1: Try the spotify-preview-finder package
-    try {
-      const previewUrl = await spotifyPreviewFinder(trackId)
-      if (previewUrl) {
-        const urlString = typeof previewUrl === 'string' ? previewUrl : previewUrl.url || previewUrl.toString()
-        if (urlString && urlString.startsWith('http')) {
-          console.log(`✅ Found preview URL via finder for "${trackName}" by ${artistName}`)
-          return urlString
-        }
-      }
-    } catch (finderError) {
-      console.log(`Finder failed for "${trackName}":`, finderError)
-    }
-    
-    // Strategy 2: Try constructing direct Spotify preview URL
-    const directUrl = `https://p.scdn.co/mp3-preview/${trackId}`
-    try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 3000)
-      
-      const response = await fetch(directUrl, { 
-        method: 'HEAD',
-        signal: controller.signal
-      })
-      clearTimeout(timeoutId)
-      
-      if (response.ok && response.headers.get('content-type')?.includes('audio')) {
-        console.log(`✅ Found direct preview URL for "${trackName}" by ${artistName}`)
-        return directUrl
-      }
-    } catch {
-      // Ignore fetch errors for direct URL
-    }
-    
-    // Strategy 3: Try alternative Spotify CDN URLs
-    const alternativeUrls = [
-      `https://p.scdn.co/mp3-preview/${trackId}?cid=null`,
-      `https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview128/${trackId}.m4a`,
-    ]
-    
-    for (const url of alternativeUrls) {
-      try {
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 2000)
-        
-        const response = await fetch(url, { 
-          method: 'HEAD',
-          signal: controller.signal
-        })
-        clearTimeout(timeoutId)
-        
-        if (response.ok) {
-          console.log(`✅ Found alternative preview URL for "${trackName}" by ${artistName}`)
-          return url
-        }
-      } catch {
-        continue
-      }
-    }
-    
-    console.log(`❌ No preview URL found for "${trackName}" by ${artistName}`)
-    return null
-  } catch (error) {
-    console.log(`❌ Error getting preview URL for "${trackName}" by ${artistName}:`, error)
-    return null
-  }
 }
 
 export interface UserTopTracks {
@@ -219,48 +146,9 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
       index === self.findIndex(t => t.id === track.id)
     )
 
-    // Separate tracks with and without previews
-    const tracksWithPreviews = uniqueTracks.filter(track => track.preview_url)
-    const tracksWithoutPreviews = uniqueTracks.filter(track => !track.preview_url)
+    console.log(`User ${userId}: ${uniqueTracks.length} unique tracks`)
 
-    console.log(`User ${userId}: ${uniqueTracks.length} unique tracks (${tracksWithPreviews.length} with previews, ${tracksWithoutPreviews.length} without)`)
-
-    // Strategy 3: Try to get preview URLs for tracks that don't have them
-    const batchSize = 10 // Process in smaller batches to avoid overwhelming
-    const enhancedTracks = [...tracksWithPreviews] // Start with tracks that already have previews
-    
-    for (let i = 0; i < tracksWithoutPreviews.length && enhancedTracks.length < 30; i += batchSize) {
-      const batch = tracksWithoutPreviews.slice(i, i + batchSize)
-      const enhancedBatch = await Promise.all(
-        batch.map(async (track) => {
-          const workaroundPreview = await getPreviewUrl(
-            track.id,
-            track.artists[0]?.name || 'Unknown',
-            track.name
-          )
-          return {
-            ...track,
-            preview_url: workaroundPreview
-          }
-        })
-      )
-      
-      // Add tracks that now have preview URLs
-      const successfulTracks = enhancedBatch.filter(track => track.preview_url)
-      enhancedTracks.push(...successfulTracks)
-      
-      console.log(`Batch ${Math.floor(i/batchSize) + 1}: Found ${successfulTracks.length}/${batch.length} preview URLs`)
-      
-      // If we have enough tracks with previews, stop processing
-      if (enhancedTracks.length >= 20) {
-        break
-      }
-    }
-
-    const finalTracksWithPreviews = enhancedTracks.filter(track => track.preview_url)
-    console.log(`User ${userId}: Final result - ${finalTracksWithPreviews.length} tracks with preview URLs`)
-
-    return enhancedTracks
+    return uniqueTracks
   } catch (error: unknown) {
     // If token is expired and we have refresh token, try to refresh
     const spotifyError = error as { statusCode?: number }
