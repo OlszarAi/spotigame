@@ -29,17 +29,11 @@ export async function POST(
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // Prevent self-voting
-    if (guessedUserId === user.id) {
-      return NextResponse.json({ error: 'You cannot guess yourself!' }, { status: 400 })
-    }
-
-    // Get game and current round
+    // Get game and all rounds
     const game = await prisma.game.findUnique({
       where: { id: params.id },
       include: {
         rounds: {
-          where: { roundNumber: { lte: 1 } }, // For now, just get round 1
           orderBy: { roundNumber: 'asc' }
         }
       }
@@ -73,14 +67,22 @@ export async function POST(
       return NextResponse.json({ error: 'You have already voted for this round' }, { status: 400 })
     }
 
-    // Create vote
-    await prisma.vote.create({
-      data: {
-        roundId: currentRound.id,
-        voterId: user.id,
-        guessedUserId: guessedUserId
+    // Create vote with additional check to prevent race conditions
+    try {
+      await prisma.vote.create({
+        data: {
+          roundId: currentRound.id,
+          voterId: user.id,
+          guessedUserId: guessedUserId
+        }
+      })
+    } catch (error: any) {
+      // If unique constraint error, the user has already voted
+      if (error.code === 'P2002') {
+        return NextResponse.json({ error: 'You have already voted for this round' }, { status: 400 })
       }
-    })
+      throw error
+    }
 
     // Check if all players have voted
     const totalParticipants = await prisma.gameParticipant.count({
@@ -93,6 +95,15 @@ export async function POST(
 
     // If all players have voted, end the round
     if (totalVotes >= totalParticipants) {
+      // Check if round is already finished to avoid duplicate processing
+      const currentRoundCheck = await prisma.round.findUnique({
+        where: { id: currentRound.id }
+      })
+      
+      if (currentRoundCheck?.status === 'FINISHED') {
+        return NextResponse.json({ success: true, message: 'Round already finished' })
+      }
+
       // Get all votes for scoring
       const votes = await prisma.vote.findMany({
         where: { roundId: currentRound.id },
@@ -100,8 +111,14 @@ export async function POST(
       })
 
       // Calculate scores - players get points for correct guesses
+      console.log(`Calculating scores for round ${currentRound.id}`)
+      console.log(`Correct answer (track owner): ${currentRound.ownerId}`)
+      console.log(`Total votes received: ${votes.length}`)
+      
       for (const vote of votes) {
+        console.log(`Vote from ${vote.voter.name} (${vote.voterId}) guessed: ${vote.guessedUserId}`)
         if (vote.guessedUserId === currentRound.ownerId) {
+          console.log(`Correct guess! Awarding 10 points to ${vote.voter.name}`)
           // Correct guess - award points
           await prisma.gameParticipant.update({
             where: {
@@ -114,6 +131,8 @@ export async function POST(
               score: { increment: 10 }
             }
           })
+        } else {
+          console.log(`Incorrect guess from ${vote.voter.name}`)
         }
       }
 

@@ -38,6 +38,13 @@ export async function GET(
       round.roundNumber === game.currentRound
     )
 
+    console.log(`Fetching game ${params.id} data:`)
+    console.log(`Current round: ${game.currentRound}`)
+    console.log(`Participants with scores:`, game.participants.map((p: any) => ({ 
+      name: p.user.name, 
+      score: p.score 
+    })))
+
     return NextResponse.json({
       ...game,
       currentRound: currentRound || null

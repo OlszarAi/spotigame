@@ -46,32 +46,34 @@ export default function GamePage({ params }: { params: { id: string } }) {
   const [showResults, setShowResults] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  const fetchGame = async () => {
+    try {
+      const response = await fetch(`/api/games/${params.id}`)
+      if (response.ok) {
+        const gameData = await response.json()
+        setGame(gameData)
+        // Set current round if it exists in the game data
+        if (gameData.currentRound) {
+          setCurrentRound(gameData.currentRound)
+          setTimeLeft(gameData.currentRound.timeLimit)
+          // Check if user has already voted for the current round
+          checkIfUserHasVoted(gameData.currentRound.id)
+        }
+      } else {
+        router.push('/dashboard')
+      }
+    } catch (error) {
+      console.error('Error fetching game:', error)
+      router.push('/dashboard')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/')
       return
-    }
-
-    const fetchGame = async () => {
-      try {
-        const response = await fetch(`/api/games/${params.id}`)
-        if (response.ok) {
-          const gameData = await response.json()
-          setGame(gameData)
-          // Set current round if it exists in the game data
-          if (gameData.currentRound) {
-            setCurrentRound(gameData.currentRound)
-            setTimeLeft(gameData.currentRound.timeLimit)
-          }
-        } else {
-          router.push('/dashboard')
-        }
-      } catch (error) {
-        console.error('Error fetching game:', error)
-        router.push('/dashboard')
-      } finally {
-        setLoading(false)
-      }
     }
 
     if (session?.user?.id) {
@@ -91,15 +93,22 @@ export default function GamePage({ params }: { params: { id: string } }) {
       setHasVoted(false)
       setSelectedPlayerId(null)
       setShowResults(false)
+      
+      // Check if user has already voted for this round
+      checkIfUserHasVoted(data.round.id)
+      // Fetch updated game state to get current scores
+      fetchGame()
     })
     
     channel.bind('round-ended', (data: { results: any }) => {
       setShowResults(true)
       setTimeLeft(0)
+      // Fetch updated game state to get new scores
+      fetchGame()
     })
     
     channel.bind('game-ended', (data: { finalScores: any }) => {
-      setGame(prev => prev ? { ...prev, status: 'FINISHED' } : null)
+      setGame((prev: any) => prev ? { ...prev, status: 'FINISHED' } : null)
     })
 
     return () => {
@@ -109,13 +118,16 @@ export default function GamePage({ params }: { params: { id: string } }) {
 
   // Timer countdown
   useEffect(() => {
-    if (timeLeft > 0 && currentRound && !hasVoted && !showResults) {
+    if (timeLeft > 0 && currentRound && !showResults) {
       const timer = setInterval(() => {
-        setTimeLeft(prev => {
+        setTimeLeft((prev: number) => {
           if (prev <= 1) {
-            // Auto-submit if time runs out
-            if (selectedPlayerId) {
+            // Auto-submit vote if user has selected someone
+            if (selectedPlayerId && !hasVoted) {
               submitVote()
+            } else if (!hasVoted) {
+              // If no selection, just end the round
+              endRound()
             }
             return 0
           }
@@ -126,6 +138,31 @@ export default function GamePage({ params }: { params: { id: string } }) {
       return () => clearInterval(timer)
     }
   }, [timeLeft, currentRound, hasVoted, showResults, selectedPlayerId])
+
+  const endRound = async () => {
+    try {
+      await fetch(`/api/games/${params.id}/end-round`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+    } catch (error) {
+      console.error('Error ending round:', error)
+    }
+  }
+
+  const checkIfUserHasVoted = async (roundId: string) => {
+    try {
+      const response = await fetch(`/api/games/${params.id}/vote/check?roundId=${roundId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setHasVoted(data.hasVoted)
+      }
+    } catch (error) {
+      console.error('Error checking vote status:', error)
+    }
+  }
 
   const submitVote = async () => {
     if (!selectedPlayerId || !currentRound || hasVoted) return
@@ -143,6 +180,13 @@ export default function GamePage({ params }: { params: { id: string } }) {
 
       if (response.ok) {
         setHasVoted(true)
+      } else {
+        const errorData = await response.json()
+        // If already voted, mark as voted to prevent further attempts
+        if (response.status === 400 && errorData.error?.includes('already voted')) {
+          setHasVoted(true)
+        }
+        console.error('Vote submission error:', errorData.error)
       }
     } catch (error) {
       console.error('Error submitting vote:', error)
@@ -278,7 +322,7 @@ export default function GamePage({ params }: { params: { id: string } }) {
           <div className="card">
             <h2 className="text-xl font-semibold mb-4">Who do you think this song belongs to?</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {game.participants.map((participant) => (
+              {game.participants.map((participant: any) => (
                 <button
                   key={participant.user.id}
                   onClick={() => setSelectedPlayerId(participant.user.id)}
@@ -328,7 +372,7 @@ export default function GamePage({ params }: { params: { id: string } }) {
             <h2 className="text-xl font-semibold mb-4">Round Results</h2>
             <p className="text-lg mb-4">
               This song belongs to: <span className="text-spotify-green font-bold">
-                {game.participants.find(p => p.user.id === currentRound.ownerId)?.user.name}
+                {game.participants.find((p: any) => p.user.id === currentRound.ownerId)?.user.name}
               </span>
             </p>
             {/* Results details would go here */}

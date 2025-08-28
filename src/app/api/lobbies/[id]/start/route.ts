@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/lib/pusher'
-import { getTopTracks, selectRandomTrack } from '@/lib/spotify'
+import { getTopTracks, selectRandomTrack, getValidAccessToken } from '@/lib/spotify'
 import { findLobbyByIdOrCode } from '@/lib/lobby-utils'
 
 export async function POST(
@@ -90,33 +90,53 @@ export async function POST(
         (account: any) => account.provider === 'spotify'
       )
 
-      if (spotifyAccount?.access_token) {
+      if (spotifyAccount) {
         try {
-          const tracks = await getTopTracks(spotifyAccount.access_token, 20)
+          // Get valid access token (with automatic refresh if needed)
+          const validToken = await getValidAccessToken(spotifyAccount, prisma)
           
-          // Select random tracks for this user (up to roundCount)
-          const selectedTracks: any[] = []
-          for (let i = 0; i < Math.min(lobby.roundCount, tracks.length); i++) {
-            const randomTrack = selectRandomTrack(tracks.filter((t: any) => 
-              !selectedTracks.find((st: any) => st.id === t.id)
-            ))
-            if (randomTrack) {
-              selectedTracks.push(randomTrack)
-              allTracks.push({
-                track: randomTrack,
-                ownerId: memberWithUser.userId
-              })
+          if (validToken) {
+            const tracks = await getTopTracks(validToken, 20)
+            
+            // Select random tracks for this user (up to roundCount)
+            const selectedTracks: any[] = []
+            for (let i = 0; i < Math.min(lobby.roundCount, tracks.length); i++) {
+              const randomTrack = selectRandomTrack(tracks.filter((t: any) => 
+                !selectedTracks.find((st: any) => st.id === t.id)
+              ))
+              if (randomTrack) {
+                selectedTracks.push(randomTrack)
+                allTracks.push({
+                  track: randomTrack,
+                  ownerId: memberWithUser.userId
+                })
+              }
             }
+          } else {
+            console.error(`Could not get valid token for user ${memberWithUser.userId}`)
           }
         } catch (error) {
           console.error(`Error fetching tracks for user ${memberWithUser.userId}:`, error)
         }
+      } else {
+        console.log(`No Spotify account found for user ${memberWithUser.userId}`)
       }
     }
 
     // Shuffle all tracks and take up to roundCount
     const shuffledTracks = allTracks.sort(() => Math.random() - 0.5)
     const gameTracks = shuffledTracks.slice(0, lobby.roundCount)
+
+    // Check if we have enough tracks
+    if (gameTracks.length === 0) {
+      return NextResponse.json({ 
+        error: 'No tracks could be fetched from Spotify. Please ensure all players have valid Spotify connections and try again.' 
+      }, { status: 400 })
+    }
+
+    if (gameTracks.length < lobby.roundCount) {
+      console.warn(`Only ${gameTracks.length} tracks found, but ${lobby.roundCount} rounds requested`)
+    }
 
     // Create rounds
     for (let i = 0; i < gameTracks.length; i++) {
