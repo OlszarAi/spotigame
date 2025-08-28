@@ -194,11 +194,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             ownerName: track.ownerName
           }))
         
-        if (spotifyTracks.length === 0) {
+        // Debug mode: if no tracks with previews and debug=no-audio, allow any track
+        const url = new URL(request.url)
+        const debugMode = url.searchParams.get('debug') === 'no-audio'
+        let availableTracks = spotifyTracks
+        
+        if (availableTracks.length === 0 && debugMode) {
+          console.log('🔧 Debug mode: Using tracks without preview URLs')
+          availableTracks = trackPool.map(track => ({
+            id: track.id,
+            name: track.name,
+            artists: [{ name: track.artist }],
+            preview_url: null, // No preview in debug mode
+            external_urls: { spotify: `https://open.spotify.com/track/${track.id}` },
+            album: {
+              name: 'Unknown Album',
+              images: []
+            },
+            ownerId: track.ownerId,
+            ownerName: track.ownerName
+          }))
+        }
+        
+        if (availableTracks.length === 0) {
           return NextResponse.json({ error: 'No tracks with preview available' }, { status: 400 })
         }
 
-        const selectedTrack = selectRandomTrack(spotifyTracks)
+        const selectedTrack = selectRandomTrack(availableTracks)
         if (!selectedTrack) {
           return NextResponse.json({ error: 'Failed to select track' }, { status: 400 })
         }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useCallback } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import Image from 'next/image'
@@ -37,8 +37,12 @@ interface GameState {
 export default function GamePage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const lobbyId = params.id as string
   const { data: session } = useSession() as { data: Session | null }
+  
+  // Debug mode - skip audio requirement
+  const debugNoAudio = searchParams.get('debug') === 'no-audio'
 
   const [gameState, setGameState] = useState<GameState | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -359,7 +363,14 @@ export default function GamePage() {
             <ArrowLeft className="w-5 h-5" />
             Back to Lobby
           </button>
-          <h1 className="text-3xl font-bold text-spotify-green">SpotiGame</h1>
+          <h1 className="text-3xl font-bold text-spotify-green">
+            SpotiGame
+            {debugNoAudio && (
+              <span className="ml-2 text-sm font-normal text-yellow-400 bg-yellow-600/20 px-2 py-1 rounded">
+                DEBUG: NO-AUDIO
+              </span>
+            )}
+          </h1>
           <div className="text-right">
             <div className="text-lg font-semibold">{getStatusDisplay()}</div>
             {gameState?.status === 'playing' && timeLeft > 0 && (
@@ -442,11 +453,29 @@ export default function GamePage() {
                 )}
 
                 {/* Audio Controls */}
-                <AudioPlayer 
-                  src={gameState.currentTrack.preview_url}
-                  autoPlay={gameState.status === 'playing'}
-                  className="mb-8"
-                />
+                {debugNoAudio ? (
+                  <div className="text-center mb-6">
+                    <div className="bg-yellow-600/20 border border-yellow-400 rounded-lg p-4">
+                      <h3 className="text-lg font-semibold text-yellow-400 mb-2">🔧 Debug Mode: No Audio</h3>
+                      <p className="text-spotify-light-gray">Audio preview is disabled for testing purposes</p>
+                      <p className="text-sm text-spotify-light-gray mt-1">
+                        Track: &quot;{gameState.currentTrack.name}&quot; by {gameState.currentTrack.artists?.[0]?.name}
+                      </p>
+                      {gameState.currentTrack.preview_url && (
+                        <p className="text-sm text-green-400 mt-1">✅ Preview URL available</p>
+                      )}
+                      {!gameState.currentTrack.preview_url && (
+                        <p className="text-sm text-red-400 mt-1">❌ No preview URL</p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <AudioPlayer 
+                    src={gameState.currentTrack.preview_url}
+                    autoPlay={gameState.status === 'playing'}
+                    className="mb-8"
+                  />
+                )}
 
                 {/* Game State Based Content */}
                 {gameState.status === 'waiting' && (
