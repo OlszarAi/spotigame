@@ -14,38 +14,89 @@ export interface SpotifyTrack {
   }
 }
 
-// Function to get preview URL using workaround for development mode
+interface SpotifyApiTrack {
+  id: string
+  name: string
+  artists: Array<{ name: string }>
+  preview_url: string | null
+  external_urls: { spotify: string }
+  album: {
+    name: string
+    images: Array<{ url: string; height?: number; width?: number }>
+  }
+}
+
+interface SpotifyApiRecentTrack {
+  track: SpotifyApiTrack
+}
+
+// Function to get preview URL using multiple strategies
 async function getPreviewUrl(trackId: string, artistName: string, trackName: string): Promise<string | null> {
   try {
-    // Try the spotify-preview-finder package first
-    const previewUrl = await spotifyPreviewFinder(trackId)
-    if (previewUrl) {
-      // Make sure we get the URL string, not an object
-      const urlString = typeof previewUrl === 'string' ? previewUrl : previewUrl.url || previewUrl.toString()
-      console.log(`Found preview URL for "${trackName}" by ${artistName}: ${urlString}`)
-      return urlString
+    // Strategy 1: Try the spotify-preview-finder package
+    try {
+      const previewUrl = await spotifyPreviewFinder(trackId)
+      if (previewUrl) {
+        const urlString = typeof previewUrl === 'string' ? previewUrl : previewUrl.url || previewUrl.toString()
+        if (urlString && urlString.startsWith('http')) {
+          console.log(`✅ Found preview URL via finder for "${trackName}" by ${artistName}`)
+          return urlString
+        }
+      }
+    } catch (finderError) {
+      console.log(`Finder failed for "${trackName}":`, finderError)
     }
     
-    // Alternative: construct potential preview URL based on track ID
-    // Spotify preview URLs follow a pattern: https://p.scdn.co/mp3-preview/[hash]
-    // This is a fallback that sometimes works
-    const possibleUrl = `https://p.scdn.co/mp3-preview/${trackId}`
-    
-    // Test if the URL exists by making a HEAD request
+    // Strategy 2: Try constructing direct Spotify preview URL
+    const directUrl = `https://p.scdn.co/mp3-preview/${trackId}`
     try {
-      const response = await fetch(possibleUrl, { method: 'HEAD' })
-      if (response.ok) {
-        console.log(`Found alternative preview URL for "${trackName}" by ${artistName}: ${possibleUrl}`)
-        return possibleUrl
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 3000)
+      
+      const response = await fetch(directUrl, { 
+        method: 'HEAD',
+        signal: controller.signal
+      })
+      clearTimeout(timeoutId)
+      
+      if (response.ok && response.headers.get('content-type')?.includes('audio')) {
+        console.log(`✅ Found direct preview URL for "${trackName}" by ${artistName}`)
+        return directUrl
       }
     } catch {
-      // Ignore fetch errors
+      // Ignore fetch errors for direct URL
     }
     
-    console.log(`No preview URL found for "${trackName}" by ${artistName}`)
+    // Strategy 3: Try alternative Spotify CDN URLs
+    const alternativeUrls = [
+      `https://p.scdn.co/mp3-preview/${trackId}?cid=null`,
+      `https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview128/${trackId}.m4a`,
+    ]
+    
+    for (const url of alternativeUrls) {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 2000)
+        
+        const response = await fetch(url, { 
+          method: 'HEAD',
+          signal: controller.signal
+        })
+        clearTimeout(timeoutId)
+        
+        if (response.ok) {
+          console.log(`✅ Found alternative preview URL for "${trackName}" by ${artistName}`)
+          return url
+        }
+      } catch {
+        continue
+      }
+    }
+    
+    console.log(`❌ No preview URL found for "${trackName}" by ${artistName}`)
     return null
   } catch (error) {
-    console.log(`Error getting preview URL for "${trackName}" by ${artistName}:`, error)
+    console.log(`❌ Error getting preview URL for "${trackName}" by ${artistName}:`, error)
     return null
   }
 }
@@ -103,82 +154,64 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
 
     console.log(`Starting track fetch for user ${userId}`)
     
-    // First, let's test with a specific popular track to see the response format
-    try {
-      const testSearch = await spotifyApi.searchTracks('Blinding Lights The Weeknd', { 
-        limit: 1,
-        market: 'US' // Try US market explicitly
-      })
-      if (testSearch.body.tracks && testSearch.body.tracks.items.length > 0) {
-        const testTrack = testSearch.body.tracks.items[0]
-        console.log(`TEST TRACK (US market) - Name: "${testTrack.name}", Preview: ${testTrack.preview_url || 'NULL'}`)
-        
-        // Try without market parameter too
-        const testSearchNoMarket = await spotifyApi.searchTracks('Blinding Lights The Weeknd', { limit: 1 })
-        if (testSearchNoMarket.body.tracks && testSearchNoMarket.body.tracks.items.length > 0) {
-          const testTrackNoMarket = testSearchNoMarket.body.tracks.items[0]
-          console.log(`TEST TRACK (no market) - Name: "${testTrackNoMarket.name}", Preview: ${testTrackNoMarket.preview_url || 'NULL'}`)
-        }
-      }
-    } catch (testError) {
-      console.log('Test search failed:', testError)
-    }
-
-    // Try multiple time ranges to get more tracks with previews
+    // Try multiple time ranges and sources to get tracks with previews
     const timeRanges = ['short_term', 'medium_term', 'long_term'] as const
     let allTracks: SpotifyTrack[] = []
 
+    // Strategy 1: Get top tracks across all time ranges
     for (const timeRange of timeRanges) {
       try {
         const response = await spotifyApi.getMyTopTracks({
           time_range: timeRange,
-          limit: 50 // Spotify API maximum limit is 50
+          limit: 50
         })
 
-        const tracks = response.body.items.map(track => {
-          console.log(`Track: "${track.name}" by ${track.artists[0]?.name} - preview_url: ${track.preview_url || 'NULL'}`)
+        const tracks: SpotifyTrack[] = response.body.items.map((track: SpotifyApiTrack) => {
+          const hasPreview = track.preview_url ? '✅' : '❌'
+          console.log(`Track: ${track.name} by ${track.artists[0]?.name} ${hasPreview}`)
+          
           return {
             id: track.id,
             name: track.name,
-            artists: track.artists.map(artist => ({ name: artist.name })),
+            artists: track.artists.map((artist: { name: string }) => ({ name: artist.name })),
             preview_url: track.preview_url,
             external_urls: track.external_urls,
-            album: {
-              name: track.album.name,
-              images: track.album.images
-            }
+            album: track.album
           }
         })
 
-        // If tracks don't have preview URLs, try to get them using workaround
-        const tracksWithWorkaroundPreviews = await Promise.all(
-          tracks.map(async (track) => {
-            if (!track.preview_url) {
-              const workaroundPreview = await getPreviewUrl(
-                track.id,
-                track.artists[0]?.name || 'Unknown',
-                track.name
-              )
-              return {
-                ...track,
-                preview_url: workaroundPreview
-              }
-            }
-            return track
-          })
-        )
-
-        allTracks = [...allTracks, ...tracksWithWorkaroundPreviews]
-        
-        // If we have enough tracks with previews, we can stop
-        const tracksWithPreviews = allTracks.filter(track => track.preview_url)
-        if (tracksWithPreviews.length >= 20) {
-          break
-        }
+        allTracks = [...allTracks, ...tracks]
       } catch (timeRangeError) {
         console.log(`Failed to fetch ${timeRange} tracks:`, timeRangeError)
         continue
       }
+    }
+
+    // Strategy 2: Get recently played tracks
+    try {
+      const recentResponse = await spotifyApi.getMyRecentlyPlayedTracks({ 
+        limit: 50
+      })
+      const recentTracks: SpotifyTrack[] = recentResponse.body.items.map((item: SpotifyApiRecentTrack) => {
+        const track = item.track
+        const hasPreview = track.preview_url ? '✅' : '❌'
+        console.log(`Recent Track: "${track.name}" by ${track.artists[0]?.name} - preview: ${hasPreview}`)
+        return {
+          id: track.id,
+          name: track.name,
+          artists: track.artists.map((artist: { name: string }) => ({ name: artist.name })),
+          preview_url: track.preview_url,
+          external_urls: track.external_urls,
+          album: {
+            name: track.album.name,
+            images: track.album.images
+          }
+        }
+      })
+      
+      allTracks = [...allTracks, ...recentTracks]
+    } catch (recentError) {
+      console.log(`Failed to fetch recently played tracks for user ${userId}:`, recentError)
     }
 
     // Remove duplicates based on track ID
@@ -186,46 +219,48 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
       index === self.findIndex(t => t.id === track.id)
     )
 
-    console.log(`User ${userId}: Fetched ${uniqueTracks.length} unique tracks across all time ranges`)
+    // Separate tracks with and without previews
     const tracksWithPreviews = uniqueTracks.filter(track => track.preview_url)
-    console.log(`User ${userId}: ${tracksWithPreviews.length} tracks have preview URLs`)
+    const tracksWithoutPreviews = uniqueTracks.filter(track => !track.preview_url)
 
-    // If we don't have enough tracks with previews from top tracks, try recently played
-    if (tracksWithPreviews.length < 10) {
-      console.log(`User ${userId}: Trying recently played tracks as fallback...`)
-      try {
-        const recentResponse = await spotifyApi.getMyRecentlyPlayedTracks({ limit: 50 })
-        const recentTracks = recentResponse.body.items.map(item => {
-          const track = item.track
-          console.log(`Recent Track: "${track.name}" by ${track.artists[0]?.name} - preview_url: ${track.preview_url || 'NULL'}`)
+    console.log(`User ${userId}: ${uniqueTracks.length} unique tracks (${tracksWithPreviews.length} with previews, ${tracksWithoutPreviews.length} without)`)
+
+    // Strategy 3: Try to get preview URLs for tracks that don't have them
+    const batchSize = 10 // Process in smaller batches to avoid overwhelming
+    const enhancedTracks = [...tracksWithPreviews] // Start with tracks that already have previews
+    
+    for (let i = 0; i < tracksWithoutPreviews.length && enhancedTracks.length < 30; i += batchSize) {
+      const batch = tracksWithoutPreviews.slice(i, i + batchSize)
+      const enhancedBatch = await Promise.all(
+        batch.map(async (track) => {
+          const workaroundPreview = await getPreviewUrl(
+            track.id,
+            track.artists[0]?.name || 'Unknown',
+            track.name
+          )
           return {
-            id: track.id,
-            name: track.name,
-            artists: track.artists.map(artist => ({ name: artist.name })),
-            preview_url: track.preview_url,
-            external_urls: track.external_urls,
-            album: {
-              name: track.album.name,
-              images: track.album.images
-            }
+            ...track,
+            preview_url: workaroundPreview
           }
         })
-        
-        // Add recent tracks that aren't already in our collection
-        const newRecentTracks = recentTracks.filter(recent => 
-          !uniqueTracks.some(existing => existing.id === recent.id)
-        )
-        
-        allTracks = [...uniqueTracks, ...newRecentTracks]
-        console.log(`User ${userId}: Added ${newRecentTracks.length} new tracks from recently played`)
-      } catch (recentError) {
-        console.log(`Failed to fetch recently played tracks for user ${userId}:`, recentError)
+      )
+      
+      // Add tracks that now have preview URLs
+      const successfulTracks = enhancedBatch.filter(track => track.preview_url)
+      enhancedTracks.push(...successfulTracks)
+      
+      console.log(`Batch ${Math.floor(i/batchSize) + 1}: Found ${successfulTracks.length}/${batch.length} preview URLs`)
+      
+      // If we have enough tracks with previews, stop processing
+      if (enhancedTracks.length >= 20) {
+        break
       }
-    } else {
-      allTracks = uniqueTracks
     }
 
-    return allTracks
+    const finalTracksWithPreviews = enhancedTracks.filter(track => track.preview_url)
+    console.log(`User ${userId}: Final result - ${finalTracksWithPreviews.length} tracks with preview URLs`)
+
+    return enhancedTracks
   } catch (error: unknown) {
     // If token is expired and we have refresh token, try to refresh
     const spotifyError = error as { statusCode?: number }
@@ -234,7 +269,6 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
       const refreshResult = await refreshSpotifyToken(userId, refreshToken)
       
       if (refreshResult) {
-        // Retry with new token - full retry with all time ranges
         console.log(`Retrying with refreshed token for user ${userId}`)
         return await fetchUserTopTracks(refreshResult.accessToken, userId, refreshToken)
       } else {
@@ -246,73 +280,67 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
     
     // FALLBACK: If personal tracks fail, try using popular tracks from search
     console.log(`Fallback: Using popular tracks from search API for user ${userId}`)
-    try {
-      const spotifyApi = new SpotifyWebApi()
-      spotifyApi.setAccessToken(accessToken)
-      
-      const popularQueries = [
-        'year:2024', 'year:2023', 'genre:pop', 'genre:hip-hop', 'genre:rock'
-      ]
-      
-      const fallbackTracks: SpotifyTrack[] = []
-      
-      for (const query of popularQueries) {
-        try {
-          const searchResponse = await spotifyApi.searchTracks(query, { 
-            limit: 10,
-            market: 'US'
-          })
-          
-          const tracks = searchResponse.body.tracks?.items.map(track => {
-            console.log(`Fallback Track: "${track.name}" by ${track.artists[0]?.name} - preview_url: ${track.preview_url || 'NULL'}`)
-            return {
-              id: track.id,
-              name: track.name,
-              artists: track.artists.map(artist => ({ name: artist.name })),
-              preview_url: track.preview_url,
-              external_urls: track.external_urls,
-              album: {
-                name: track.album.name,
-                images: track.album.images
-              }
+    return await getPopularTracksAsFallback(accessToken)
+  }
+}
+
+// New fallback function for popular tracks
+async function getPopularTracksAsFallback(accessToken: string): Promise<SpotifyTrack[]> {
+  try {
+    const spotifyApi = new SpotifyWebApi()
+    spotifyApi.setAccessToken(accessToken)
+    
+    const popularQueries = [
+      'year:2024 genre:pop',
+      'year:2023 genre:hip-hop', 
+      'year:2024 genre:rock',
+      'The Weeknd',
+      'Ed Sheeran',
+      'Dua Lipa',
+      'Ariana Grande',
+      'Justin Bieber'
+    ]
+    
+    const fallbackTracks: SpotifyTrack[] = []
+    
+    for (const query of popularQueries) {
+      try {
+        const searchResponse = await spotifyApi.searchTracks(query, { 
+          limit: 10,
+          market: 'US'
+        })
+        
+        const tracks: SpotifyTrack[] = searchResponse.body.tracks?.items.map((track: SpotifyApiTrack) => {
+          const hasPreview = track.preview_url ? '✅' : '❌'
+          console.log(`Fallback Track: "${track.name}" by ${track.artists[0]?.name} - preview: ${hasPreview}`)
+          return {
+            id: track.id,
+            name: track.name,
+            artists: track.artists.map((artist: { name: string }) => ({ name: artist.name })),
+            preview_url: track.preview_url,
+            external_urls: track.external_urls,
+            album: {
+              name: track.album.name,
+              images: track.album.images
             }
-          }) || []
-          
-          // Apply workaround for missing preview URLs
-          const tracksWithWorkaroundPreviews = await Promise.all(
-            tracks.map(async (track) => {
-              if (!track.preview_url) {
-                const workaroundPreview = await getPreviewUrl(
-                  track.id,
-                  track.artists[0]?.name || 'Unknown',
-                  track.name
-                )
-                return {
-                  ...track,
-                  preview_url: workaroundPreview
-                }
-              }
-              return track
-            })
-          )
-          
-          fallbackTracks.push(...tracksWithWorkaroundPreviews)
-          
-          if (fallbackTracks.length >= 20) break
-        } catch (searchError) {
-          console.log(`Failed search for ${query}:`, searchError)
-        }
+          }
+        }) || []
+        
+        // Prioritize tracks that already have preview URLs
+        const tracksWithPreviews = tracks.filter(track => track.preview_url)
+        fallbackTracks.push(...tracksWithPreviews)
+        
+        if (fallbackTracks.length >= 15) break
+      } catch (searchError) {
+        console.log(`Failed search for ${query}:`, searchError)
       }
-      
-      console.log(`Fallback: Got ${fallbackTracks.length} tracks from search`)
-      const tracksWithPreviews = fallbackTracks.filter(track => track.preview_url)
-      console.log(`Fallback: ${tracksWithPreviews.length} tracks have preview URLs`)
-      
-      return fallbackTracks
-    } catch (fallbackError) {
-      console.error('Fallback search also failed:', fallbackError)
-      throw new Error('Failed to fetch any tracks')
     }
+    
+    console.log(`Fallback: Got ${fallbackTracks.length} tracks with preview URLs`)
+    return fallbackTracks
+  } catch (fallbackError) {
+    console.error('Fallback search also failed:', fallbackError)
+    throw new Error('Failed to fetch any tracks')
   }
 }
 

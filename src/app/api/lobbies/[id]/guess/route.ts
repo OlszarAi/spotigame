@@ -26,6 +26,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Guessed user ID is required' }, { status: 400 })
     }
 
+    // Prevent self-voting
+    if (guessedUserId === session.user.id) {
+      return NextResponse.json({ error: 'You cannot guess yourself!' }, { status: 400 })
+    }
+
     // Get current game session
     const { data: gameSession, error: sessionError } = await supabaseAdmin
       .from('game_sessions')
@@ -117,6 +122,46 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (updateScoreError) {
       console.error('Error updating player score:', updateScoreError)
       return NextResponse.json({ error: 'Failed to update score' }, { status: 500 })
+    }
+
+    // Check if all players have guessed
+    const { data: lobby } = await supabaseAdmin
+      .from('lobbies')
+      .select('lobby_players(user_id)')
+      .eq('id', id)
+      .single()
+
+    const { data: allGuesses } = await supabaseAdmin
+      .from('round_guesses')
+      .select('user_id')
+      .eq('game_session_id', gameSession.id)
+      .eq('round_number', gameSession.round_number)
+
+    const totalPlayers = lobby?.lobby_players?.length || 0
+    const totalGuesses = allGuesses?.length || 0
+
+    console.log(`Round ${gameSession.round_number}: ${totalGuesses}/${totalPlayers} players have guessed`)
+
+    // If all players have guessed, end the round
+    if (totalGuesses >= totalPlayers) {
+      console.log('All players have guessed, ending round...')
+      await supabaseAdmin
+        .from('game_sessions')
+        .update({ status: 'voting' })
+        .eq('id', gameSession.id)
+
+      // Auto advance to next round after 3 seconds
+      setTimeout(async () => {
+        try {
+          await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/lobbies/${id}/game-state`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'start_round' })
+          })
+        } catch (error) {
+          console.error('Error auto-advancing round:', error)
+        }
+      }, 3000)
     }
 
     return NextResponse.json({ 
