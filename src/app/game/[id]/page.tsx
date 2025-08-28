@@ -58,6 +58,11 @@ export default function GamePage({ params }: { params: { id: string } }) {
         if (response.ok) {
           const gameData = await response.json()
           setGame(gameData)
+          // Set current round if it exists in the game data
+          if (gameData.currentRound) {
+            setCurrentRound(gameData.currentRound)
+            setTimeLeft(gameData.currentRound.timeLimit)
+          }
         } else {
           router.push('/dashboard')
         }
