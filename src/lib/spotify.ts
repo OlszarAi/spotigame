@@ -81,7 +81,7 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
 
     console.log(`Starting track fetch for user ${userId}`)
     
-    // Try multiple time ranges and sources to get tracks with previews
+    // Try multiple time ranges and sources to get tracks
     const timeRanges = ['short_term', 'medium_term', 'long_term'] as const
     let allTracks: SpotifyTrack[] = []
 
@@ -94,9 +94,6 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
         })
 
         const tracks: SpotifyTrack[] = response.body.items.map((track: SpotifyApiTrack) => {
-          const hasPreview = track.preview_url ? '✅' : '❌'
-          console.log(`Track: ${track.name} by ${track.artists[0]?.name} ${hasPreview}`)
-          
           return {
             id: track.id,
             name: track.name,
@@ -121,8 +118,6 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
       })
       const recentTracks: SpotifyTrack[] = recentResponse.body.items.map((item: SpotifyApiRecentTrack) => {
         const track = item.track
-        const hasPreview = track.preview_url ? '✅' : '❌'
-        console.log(`Recent Track: "${track.name}" by ${track.artists[0]?.name} - preview: ${hasPreview}`)
         return {
           id: track.id,
           name: track.name,
@@ -199,8 +194,6 @@ async function getPopularTracksAsFallback(accessToken: string): Promise<SpotifyT
         })
         
         const tracks: SpotifyTrack[] = searchResponse.body.tracks?.items.map((track: SpotifyApiTrack) => {
-          const hasPreview = track.preview_url ? '✅' : '❌'
-          console.log(`Fallback Track: "${track.name}" by ${track.artists[0]?.name} - preview: ${hasPreview}`)
           return {
             id: track.id,
             name: track.name,
@@ -236,10 +229,9 @@ export function createTrackPool(userTracks: UserTopTracks[]): Array<SpotifyTrack
   const pool: Array<SpotifyTrack & { ownerId: string; ownerName: string }> = []
   
   userTracks.forEach(({ userId, username, tracks }) => {
-    const tracksWithPreview = tracks.filter(track => track.preview_url)
-    console.log(`User ${username}: ${tracks.length} total tracks, ${tracksWithPreview.length} with preview_url`)
+    console.log(`User ${username}: ${tracks.length} tracks fetched`)
     
-    tracksWithPreview.forEach(track => {
+    tracks.forEach(track => {
       pool.push({
         ...track,
         ownerId: userId,
@@ -248,12 +240,12 @@ export function createTrackPool(userTracks: UserTopTracks[]): Array<SpotifyTrack
     })
   })
 
-  console.log(`Total track pool size: ${pool.length} tracks with previews`)
+  console.log(`Total track pool size: ${pool.length} tracks`)
   
-  // If we don't have enough tracks with previews, we should still allow the game to start
+  // Return all tracks since we use embeds for audio
   // The game can work with even 1 track, though it's not ideal
   if (pool.length < 5) {
-    console.warn(`Warning: Only ${pool.length} tracks available with previews. Game may have limited variety.`)
+    console.warn(`Warning: Only ${pool.length} tracks available. Game may have limited variety.`)
   }
   
   return pool

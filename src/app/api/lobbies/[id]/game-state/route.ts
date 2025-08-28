@@ -179,7 +179,6 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         
         // Convert to proper SpotifyTrack format for selectRandomTrack
         const spotifyTracks = trackPool
-          .filter(track => track.preview_url)
           .map(track => ({
             id: track.id,
             name: track.name,
@@ -194,7 +193,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             ownerName: track.ownerName
           }))
         
-        // Debug mode: if no tracks with previews and debug=no-audio, allow any track
+        // Now all tracks are available since we use embeds for audio
         const url = new URL(request.url)
         const debugMode = url.searchParams.get('debug') === 'no-audio'
         let availableTracks = spotifyTracks

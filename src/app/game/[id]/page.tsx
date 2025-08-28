@@ -611,7 +611,7 @@ export default function GamePage() {
           <div className="text-center">
             <h2 className="text-2xl mb-4">No tracks available</h2>
             <p className="text-white/70 mb-6">
-              Game is starting or no tracks with previews are available.
+              Game is starting or no tracks are available.
             </p>
             <button 
               onClick={goBackToLobby}
