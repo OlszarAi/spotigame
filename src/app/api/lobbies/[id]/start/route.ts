@@ -108,7 +108,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     const trackPool = createTrackPool(userTracks)
 
     if (trackPool.length === 0) {
-      return NextResponse.json({ error: 'No tracks with preview available' }, { status: 400 })
+      return NextResponse.json({ 
+        error: 'No tracks with preview available. Unfortunately, none of the players\' top tracks have audio previews. This is a common limitation of the Spotify API. Please try again later or ensure all players have recently listened to popular songs with previews available.',
+        details: {
+          playersProcessed: userTracks.length,
+          totalPlayerTracks: userTracks.reduce((sum, user) => sum + user.tracks.length, 0)
+        }
+      }, { status: 400 })
+    }
+
+    if (trackPool.length < 5) {
+      console.warn(`Starting game with only ${trackPool.length} tracks available. This may result in limited variety.`)
     }
 
     // Create game session

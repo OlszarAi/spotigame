@@ -50,26 +50,56 @@ async function refreshSpotifyToken(userId: string, refreshToken: string): Promis
 }
 
 export async function fetchUserTopTracks(accessToken: string, userId?: string, refreshToken?: string): Promise<SpotifyTrack[]> {
-  const spotifyApi = new SpotifyWebApi()
-  spotifyApi.setAccessToken(accessToken)
-
   try {
-    const response = await spotifyApi.getMyTopTracks({
-      time_range: 'short_term',
-      limit: 50 // Spotify API maximum limit is 50
-    })
+    const spotifyApi = new SpotifyWebApi()
+    spotifyApi.setAccessToken(accessToken)
 
-    return response.body.items.map(track => ({
-      id: track.id,
-      name: track.name,
-      artists: track.artists.map(artist => ({ name: artist.name })),
-      preview_url: track.preview_url,
-      external_urls: track.external_urls,
-      album: {
-        name: track.album.name,
-        images: track.album.images
+    // Try multiple time ranges to get more tracks with previews
+    const timeRanges = ['short_term', 'medium_term', 'long_term'] as const
+    let allTracks: SpotifyTrack[] = []
+
+    for (const timeRange of timeRanges) {
+      try {
+        const response = await spotifyApi.getMyTopTracks({
+          time_range: timeRange,
+          limit: 50 // Spotify API maximum limit is 50
+        })
+
+        const tracks = response.body.items.map(track => ({
+          id: track.id,
+          name: track.name,
+          artists: track.artists.map(artist => ({ name: artist.name })),
+          preview_url: track.preview_url,
+          external_urls: track.external_urls,
+          album: {
+            name: track.album.name,
+            images: track.album.images
+          }
+        }))
+
+        allTracks = [...allTracks, ...tracks]
+        
+        // If we have enough tracks with previews, we can stop
+        const tracksWithPreviews = allTracks.filter(track => track.preview_url)
+        if (tracksWithPreviews.length >= 20) {
+          break
+        }
+      } catch (timeRangeError) {
+        console.log(`Failed to fetch ${timeRange} tracks:`, timeRangeError)
+        continue
       }
-    }))
+    }
+
+    // Remove duplicates based on track ID
+    const uniqueTracks = allTracks.filter((track, index, self) => 
+      index === self.findIndex(t => t.id === track.id)
+    )
+
+    console.log(`User ${userId}: Fetched ${uniqueTracks.length} unique tracks across all time ranges`)
+    const tracksWithPreviews = uniqueTracks.filter(track => track.preview_url)
+    console.log(`User ${userId}: ${tracksWithPreviews.length} tracks have preview URLs`)
+
+    return uniqueTracks
   } catch (error: unknown) {
     // If token is expired and we have refresh token, try to refresh
     const spotifyError = error as { statusCode?: number }
@@ -78,12 +108,13 @@ export async function fetchUserTopTracks(accessToken: string, userId?: string, r
       const newAccessToken = await refreshSpotifyToken(userId, refreshToken)
       
       if (newAccessToken) {
-        // Retry with new token
+        // Retry with new token (simplified retry - just short_term for now)
+        const spotifyApi = new SpotifyWebApi()
         spotifyApi.setAccessToken(newAccessToken)
         try {
           const response = await spotifyApi.getMyTopTracks({
             time_range: 'short_term',
-            limit: 50 // Spotify API maximum limit is 50
+            limit: 50
           })
 
           return response.body.items.map(track => ({
@@ -113,18 +144,26 @@ export function createTrackPool(userTracks: UserTopTracks[]): Array<SpotifyTrack
   const pool: Array<SpotifyTrack & { ownerId: string; ownerName: string }> = []
   
   userTracks.forEach(({ userId, username, tracks }) => {
-    tracks.forEach(track => {
-      // Only include tracks with preview URLs
-      if (track.preview_url) {
-        pool.push({
-          ...track,
-          ownerId: userId,
-          ownerName: username
-        })
-      }
+    const tracksWithPreview = tracks.filter(track => track.preview_url)
+    console.log(`User ${username}: ${tracks.length} total tracks, ${tracksWithPreview.length} with preview_url`)
+    
+    tracksWithPreview.forEach(track => {
+      pool.push({
+        ...track,
+        ownerId: userId,
+        ownerName: username
+      })
     })
   })
 
+  console.log(`Total track pool size: ${pool.length} tracks with previews`)
+  
+  // If we don't have enough tracks with previews, we should still allow the game to start
+  // The game can work with even 1 track, though it's not ideal
+  if (pool.length < 5) {
+    console.warn(`Warning: Only ${pool.length} tracks available with previews. Game may have limited variety.`)
+  }
+  
   return pool
 }
 
