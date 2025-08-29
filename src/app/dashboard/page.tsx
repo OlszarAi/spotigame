@@ -174,7 +174,7 @@ export default function Dashboard() {
                     type="number"
                     id="roundCount"
                     min="1"
-                    max="20"
+                    max="50"
                     value={roundCount}
                     onChange={(e) => setRoundCount(parseInt(e.target.value))}
                     className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"

@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/lib/pusher'
-import { getTopTracks, selectRandomTrack, getValidAccessToken } from '@/lib/spotify'
+import { getTopTracks, selectRandomTracks, shuffleArray, getValidAccessToken } from '@/lib/spotify'
 import { findLobbyByIdOrCode } from '@/lib/lobby-utils'
 
 export async function POST(
@@ -129,63 +129,81 @@ export async function POST(
 
     console.log(`Fair distribution: ${songsPerPlayer} songs per player, ${remainingSongs} extra songs`)
 
-    // Select tracks with fair distribution and no duplicates
+    // Select tracks with fair distribution and no duplicates - NOW WITH TRUE RANDOMIZATION
     const selectedTracks: Array<{
       track: any
       ownerId: string
     }> = []
     const usedTrackIds = new Set<string>()
 
-    // First, give each player their fair share
+    // First, randomize tracks for each player before selection
+    const randomizedPlayerTracks = playerTracks.map(playerData => ({
+      ...playerData,
+      tracks: shuffleArray(playerData.tracks) // Randomize the order for each player
+    }))
+
+    // First, give each player their fair share using random selection
     for (let i = 0; i < numberOfPlayers; i++) {
-      const playerData = playerTracks[i]
+      const playerData = randomizedPlayerTracks[i]
       const playerSongCount = songsPerPlayer + (i < remainingSongs ? 1 : 0) // Distribute remaining songs to first players
       
-      let selectedForPlayer = 0
-      let trackIndex = 0
+      // Get available tracks (not already used)
+      const availableTracks = playerData.tracks.filter(track => !usedTrackIds.has(track.id))
       
-      while (selectedForPlayer < playerSongCount && trackIndex < playerData.tracks.length) {
-        const track = playerData.tracks[trackIndex]
-        
-        // Check if this track ID is already used
-        if (!usedTrackIds.has(track.id)) {
-          selectedTracks.push({
-            track: track,
-            ownerId: playerData.playerId
-          })
-          usedTrackIds.add(track.id)
-          selectedForPlayer++
-        }
-        
-        trackIndex++
-      }
+      // Select random tracks from available ones
+      const selectedForPlayer = selectRandomTracks(availableTracks, playerSongCount)
       
-      console.log(`Player ${i + 1} got ${selectedForPlayer} songs out of ${playerSongCount} requested`)
+      selectedForPlayer.forEach(track => {
+        selectedTracks.push({
+          track: track,
+          ownerId: playerData.playerId
+        })
+        usedTrackIds.add(track.id)
+      })
+      
+      console.log(`Player ${i + 1} got ${selectedForPlayer.length} songs out of ${playerSongCount} requested`)
     }
 
-    // If we still don't have enough tracks (due to duplicates), try to fill from any player
+    // If we still don't have enough tracks (due to duplicates), try to fill from any player with random selection
     if (selectedTracks.length < totalRounds) {
       console.log(`Need ${totalRounds - selectedTracks.length} more tracks, trying to fill from any player`)
       
-      for (const playerData of playerTracks) {
-        if (selectedTracks.length >= totalRounds) break
-        
+      // Collect all remaining available tracks from all players
+      const allRemainingTracks: Array<{track: any, ownerId: string}> = []
+      
+      for (const playerData of randomizedPlayerTracks) {
         for (const track of playerData.tracks) {
-          if (selectedTracks.length >= totalRounds) break
-          
           if (!usedTrackIds.has(track.id)) {
-            selectedTracks.push({
+            allRemainingTracks.push({
               track: track,
               ownerId: playerData.playerId
             })
-            usedTrackIds.add(track.id)
           }
         }
       }
+      
+      // Randomly select from remaining tracks
+      const remainingNeeded = totalRounds - selectedTracks.length
+      const randomRemainingTracks = selectRandomTracks(
+        allRemainingTracks.map(item => item.track), 
+        remainingNeeded
+      )
+      
+      // Add the selected remaining tracks
+      randomRemainingTracks.forEach(track => {
+        const ownerData = allRemainingTracks.find(item => item.track.id === track.id)
+        if (ownerData) {
+          selectedTracks.push({
+            track: track,
+            ownerId: ownerData.ownerId
+          })
+          usedTrackIds.add(track.id)
+        }
+      })
     }
 
-    // Shuffle the selected tracks for random order
-    const shuffledTracks = selectedTracks.sort(() => Math.random() - 0.5)
+    // Shuffle the selected tracks for random order using Fisher-Yates algorithm
+    const shuffledTracks = shuffleArray(selectedTracks)
     const gameTracks = shuffledTracks.slice(0, totalRounds)
 
     // Check if we have enough tracks

@@ -87,8 +87,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Max players must be between 2 and 12' }, { status: 400 })
     }
 
-    if (roundCount !== undefined && (roundCount < 1 || roundCount > 20)) {
-      return NextResponse.json({ error: 'Round count must be between 1 and 20' }, { status: 400 })
+    if (roundCount !== undefined && (roundCount < 1 || roundCount > 50)) {
+      return NextResponse.json({ error: 'Round count must be between 1 and 50' }, { status: 400 })
     }
 
     // Check if reducing maxPlayers would kick existing members

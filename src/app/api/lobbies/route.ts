@@ -3,9 +3,18 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/lib/pusher'
+import { DatabaseCleanupService } from '@/lib/cleanup-service'
 
 export async function POST(req: NextRequest) {
   try {
+    // Perform cleanup occasionally (10% chance) to avoid performance impact
+    if (Math.random() < 0.1) {
+      const cleanupService = DatabaseCleanupService.getInstance()
+      cleanupService.performCleanup().catch(error => {
+        console.error('Background cleanup failed:', error)
+      })
+    }
+
     const session = await getServerSession(authOptions) as any
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

@@ -4,12 +4,21 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/lib/pusher'
 import { findLobbyByIdOrCode } from '@/lib/lobby-utils'
+import { DatabaseCleanupService } from '@/lib/cleanup-service'
 
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    // Perform cleanup occasionally (5% chance) to avoid performance impact
+    if (Math.random() < 0.05) {
+      const cleanupService = DatabaseCleanupService.getInstance()
+      cleanupService.performCleanup().catch(error => {
+        console.error('Background cleanup failed:', error)
+      })
+    }
+
     const session = await getServerSession(authOptions) as any
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

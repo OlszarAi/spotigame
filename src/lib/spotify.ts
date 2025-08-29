@@ -134,3 +134,22 @@ export function selectRandomTrack(tracks: SpotifyTrack[]): SpotifyTrack | null {
   const randomIndex = Math.floor(Math.random() * tracks.length)
   return tracks[randomIndex]
 }
+
+// Fisher-Yates shuffle algorithm for true randomization
+export function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array] // Create a copy
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled
+}
+
+// Select random tracks from an array without replacement
+export function selectRandomTracks(tracks: SpotifyTrack[], count: number): SpotifyTrack[] {
+  if (tracks.length === 0) return []
+  if (count >= tracks.length) return shuffleArray(tracks)
+  
+  const shuffled = shuffleArray(tracks)
+  return shuffled.slice(0, count)
+}

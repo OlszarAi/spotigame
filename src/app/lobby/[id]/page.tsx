@@ -428,7 +428,7 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
                       type="number"
                       id="roundCount"
                       min="1"
-                      max="20"
+                      max="50"
                       value={tempRoundCount}
                       onChange={(e) => setTempRoundCount(parseInt(e.target.value))}
                       className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
