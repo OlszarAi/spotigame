@@ -1,5 +1,12 @@
 # SpotiGame - Music Guessing Game
 
+Interaktywna gra muzyczna oparta na Spotify API, gdzie gracze zgadują utwory w czasie rzeczywistym.
+
+## 👨‍💻 Autor
+
+**Adam Olszar**
+- GitHub: [@OlszarAi](https://github.com/OlszarAi)
+
 ## 🏗️ Architektura
 
 ### Tech Stack
@@ -225,3 +232,11 @@ vercel logs
 # Local development
 npm run dev
 ```
+
+## 📄 Licencja
+
+Ten projekt jest udostępniony na licencji MIT. Zobacz plik [LICENSE](LICENSE) po więcej szczegółów.
+
+## 🤝 Kontakt
+
+W przypadku pytań lub sugestii, skontaktuj się z autorem lub utwórz issue w repozytorium.
