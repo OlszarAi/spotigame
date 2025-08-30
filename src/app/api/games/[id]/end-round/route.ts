@@ -113,22 +113,23 @@ export async function POST(
           data: { startedAt: new Date() }
         })
 
-        // Emit next round started event after a delay
-        setTimeout(() => {
-          pusherServer.trigger(`game-${game.id}`, 'round-started', {
-            round: nextRound
-          })
-        }, 7000) // 5 second delay
+        // For Vercel serverless - trigger round start with delay data
+        // instead of using setTimeout which doesn't work reliably
+        await pusherServer.trigger(`game-${game.id}`, 'round-will-start', {
+          round: nextRound,
+          delaySeconds: 5
+        })
       }
     }
 
-    // Emit round ended event
+    // Emit round ended event - MUST be awaited for Vercel
     await pusherServer.trigger(`game-${game.id}`, 'round-ended', {
       results: {
         correctAnswer: currentRound.ownerId,
         votes: votes.map((v: any) => ({
           voter: v.voter.name,
-          guess: v.guessedUserId
+          guess: v.guessedUserId,
+          isCorrect: v.guessedUserId === currentRound.ownerId
         }))
       }
     })

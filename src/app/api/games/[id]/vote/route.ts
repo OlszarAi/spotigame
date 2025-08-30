@@ -13,6 +13,8 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    console.log(`[vote] Starting vote submission for game ${params.id}`)
+    
     const session = await getServerSession(authOptions) as any
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -23,6 +25,8 @@ export async function POST(
     if (!guessedUserId) {
       return NextResponse.json({ error: 'Guessed user ID is required' }, { status: 400 })
     }
+
+    console.log(`[vote] User ${session.user.email} voting for ${guessedUserId} in game ${params.id}`)
 
     // Single query to get user, game, and current round
     const user = await prisma.user.findUnique({
@@ -60,6 +64,8 @@ export async function POST(
     if (!currentRound) {
       return NextResponse.json({ error: 'No active round' }, { status: 400 })
     }
+
+    console.log(`[vote] Current round: ${currentRound.id}, round number: ${game.currentRound}`)
 
     // Check cache first
     const cacheKey = `${currentRound.id}-${user.id}`
@@ -111,6 +117,8 @@ export async function POST(
       }
     })
 
+    console.log(`[vote] Vote successful. Total votes: ${result.totalVotes}/${result.totalParticipants}`)
+
     // Immediate response to user
     const response = NextResponse.json({ 
       success: true, 
@@ -119,13 +127,17 @@ export async function POST(
       totalPlayers: result.totalParticipants
     })
 
-    // Process round ending asynchronously if all voted
+    // Process round ending synchronously if all voted - crucial for Vercel
     if (result.totalVotes >= result.totalParticipants) {
-      // Don't await this - let it run in background
-      processRoundEnd(game.id, currentRound.id, game.currentRound, game.totalRounds)
-        .catch(error => {
-          console.error('Error processing round end:', error)
-        })
+      console.log(`[vote] All players voted, processing round end`)
+      try {
+        // IMPORTANT: await this for Vercel serverless functions
+        await processRoundEnd(game.id, currentRound.id, game.currentRound, game.totalRounds)
+        console.log(`[vote] Round end processing completed successfully`)
+      } catch (error) {
+        console.error('[vote] Error processing round end:', error)
+        // Don't fail the vote even if round end processing fails
+      }
     }
 
     return response
@@ -134,7 +146,7 @@ export async function POST(
     if (error.message === 'Already voted') {
       return NextResponse.json({ error: 'You have already voted for this round' }, { status: 400 })
     }
-    console.error('Error submitting vote:', error)
+    console.error(`[vote] Error submitting vote for game ${params.id}:`, error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
@@ -142,6 +154,8 @@ export async function POST(
 // Async function to handle round ending
 async function processRoundEnd(gameId: string, roundId: string, currentRoundNumber: number, totalRounds: number) {
   try {
+    console.log(`[processRoundEnd] Starting for game ${gameId}, round ${roundId}, round number ${currentRoundNumber}/${totalRounds}`)
+    
     // Check if round is already finished
     const round = await prisma.round.findUnique({
       where: { id: roundId },
@@ -149,8 +163,11 @@ async function processRoundEnd(gameId: string, roundId: string, currentRoundNumb
     })
     
     if (round?.status === 'FINISHED') {
+      console.log(`[processRoundEnd] Round ${roundId} already finished, skipping`)
       return
     }
+
+    console.log(`[processRoundEnd] Round ${roundId} owner: ${round?.ownerId}`)
 
     // Get all votes for scoring in single query
     const votes = await prisma.vote.findMany({
@@ -162,8 +179,11 @@ async function processRoundEnd(gameId: string, roundId: string, currentRoundNumb
       }
     })
 
+    console.log(`[processRoundEnd] Found ${votes.length} votes for round ${roundId}`)
+
     // Batch update scores
     const correctVotes = votes.filter((v: any) => v.guessedUserId === round?.ownerId)
+    console.log(`[processRoundEnd] ${correctVotes.length} correct votes out of ${votes.length}`)
     
     if (correctVotes.length > 0) {
       await prisma.gameParticipant.updateMany({
@@ -175,6 +195,7 @@ async function processRoundEnd(gameId: string, roundId: string, currentRoundNumb
           score: { increment: 10 }
         }
       })
+      console.log(`[processRoundEnd] Updated scores for ${correctVotes.length} players`)
     }
 
     // Mark round as finished
@@ -185,9 +206,11 @@ async function processRoundEnd(gameId: string, roundId: string, currentRoundNumb
         endedAt: new Date()
       }
     })
+    console.log(`[processRoundEnd] Marked round ${roundId} as FINISHED`)
 
     // Check if game finished
     if (currentRoundNumber >= totalRounds) {
+      console.log(`[processRoundEnd] Game ${gameId} finished (round ${currentRoundNumber}/${totalRounds})`)
       await prisma.game.update({
         where: { id: gameId },
         data: { status: 'FINISHED' }
@@ -199,12 +222,15 @@ async function processRoundEnd(gameId: string, roundId: string, currentRoundNumb
         orderBy: { score: 'desc' }
       })
 
+      console.log(`[processRoundEnd] Triggering game-ended event for game ${gameId}`)
       await pusherServer.trigger(`game-${gameId}`, 'game-ended', {
         finalScores
       })
     } else {
       // Start next round
       const nextRoundNumber = currentRoundNumber + 1
+      console.log(`[processRoundEnd] Starting next round ${nextRoundNumber} for game ${gameId}`)
+      
       await prisma.game.update({
         where: { id: gameId },
         data: { currentRound: nextRoundNumber }
@@ -223,20 +249,18 @@ async function processRoundEnd(gameId: string, roundId: string, currentRoundNumb
           data: { startedAt: new Date() }
         })
 
-        // Delay next round start
-        setTimeout(async () => {
-          try {
-            await pusherServer.trigger(`game-${gameId}`, 'round-started', {
-              round: nextRound
-            })
-          } catch (error) {
-            console.error('Error triggering round-started:', error)
-          }
-        }, 3000)
+        console.log(`[processRoundEnd] Triggering round-will-start event for game ${gameId}, round ${nextRound.id}`)
+        // For Vercel serverless - trigger round start immediately with delay data
+        // instead of using setTimeout which doesn't work reliably
+        await pusherServer.trigger(`game-${gameId}`, 'round-will-start', {
+          round: nextRound,
+          delaySeconds: 3
+        })
       }
     }
 
-    // Emit round ended event
+    console.log(`[processRoundEnd] Triggering round-ended event for game ${gameId}`)
+    // Emit round ended event - MUST be awaited for Vercel
     await pusherServer.trigger(`game-${gameId}`, 'round-ended', {
       results: {
         correctAnswer: round?.ownerId,
@@ -248,7 +272,10 @@ async function processRoundEnd(gameId: string, roundId: string, currentRoundNumb
       }
     })
 
+    console.log(`[processRoundEnd] Completed successfully for game ${gameId}`)
+
   } catch (error) {
-    console.error('Error in processRoundEnd:', error)
+    console.error(`[processRoundEnd] Error in processRoundEnd for game ${gameId}:`, error)
+    throw error // Re-throw so caller knows it failed
   }
 }

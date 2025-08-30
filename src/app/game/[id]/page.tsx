@@ -48,6 +48,7 @@ export default function GamePage({ params }: { params: { id: string } }) {
   const [isInBreak, setIsInBreak] = useState(false)
   const [roundOwnerName, setRoundOwnerName] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [fallbackTimer, setFallbackTimer] = useState<NodeJS.Timeout | null>(null)
 
   const fetchGame = async () => {
     try {
@@ -104,18 +105,68 @@ export default function GamePage({ params }: { params: { id: string } }) {
       // Fetch updated game state to get current scores
       fetchGame()
     })
+
+    // New event for Vercel compatibility - handles delayed round start
+    channel.bind('round-will-start', (data: { round: Round, delaySeconds: number }) => {
+      console.log('[round-will-start] Received round will start event:', data)
+      
+      // Clear any existing fallback timer
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer)
+        setFallbackTimer(null)
+      }
+      
+      // Start countdown and then trigger round start
+      setIsInBreak(true)
+      setBreakTimeLeft(data.delaySeconds)
+      
+      // Store the next round data
+      const nextRoundRef = data.round
+      
+      // Set timer to start round after delay
+      setTimeout(() => {
+        console.log('[round-will-start] Starting next round after delay')
+        setCurrentRound(nextRoundRef)
+        setTimeLeft(nextRoundRef.timeLimit)
+        setHasVoted(false)
+        setSelectedPlayerId(null)
+        setShowResults(false)
+        setIsInBreak(false)
+        setBreakTimeLeft(0)
+        
+        // Check if user has already voted for this round
+        checkIfUserHasVoted(nextRoundRef.id)
+        // Fetch updated game state to get current scores
+        fetchGame()
+      }, data.delaySeconds * 1000)
+    })
     
     channel.bind('round-ended', (data: { results: any }) => {
+      console.log('[round-ended] Received round ended event:', data)
       setShowResults(true)
       setTimeLeft(0)
+      
+      // Clear any existing fallback timer
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer)
+        setFallbackTimer(null)
+      }
       
       // Find the round owner name
       const ownerName = game.participants.find((p: any) => p.user.id === data.results.correctAnswer)?.user.name || 'Unknown'
       setRoundOwnerName(ownerName)
       
-      // Start 5-second break
+      // Start 5-second break to show results
       setIsInBreak(true)
       setBreakTimeLeft(5)
+      
+      // Set fallback timer in case round-will-start event doesn't come
+      const timer = setTimeout(() => {
+        console.log('[fallback] No round-will-start event received, forcing next round')
+        forceNextRound()
+      }, 12000) // 12 seconds fallback
+      
+      setFallbackTimer(timer)
       
       // Fetch updated game state to get new scores
       fetchGame()
@@ -127,6 +178,11 @@ export default function GamePage({ params }: { params: { id: string } }) {
 
     return () => {
       pusherClient.unsubscribe(`game-${game.id}`)
+      // Clear any fallback timer
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer)
+        setFallbackTimer(null)
+      }
     }
   }, [game])
 
@@ -180,6 +236,29 @@ export default function GamePage({ params }: { params: { id: string } }) {
       })
     } catch (error) {
       console.error('Error ending round:', error)
+    }
+  }
+
+  const forceNextRound = async () => {
+    try {
+      console.log('[forceNextRound] Attempting to force next round')
+      const response = await fetch(`/api/games/${params.id}/force-next-round`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('[forceNextRound] Successfully forced next round:', data)
+        // Refresh game state
+        fetchGame()
+      } else {
+        console.error('[forceNextRound] Failed to force next round:', response.status)
+      }
+    } catch (error) {
+      console.error('[forceNextRound] Error forcing next round:', error)
     }
   }
 
