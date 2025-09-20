@@ -13,6 +13,8 @@ export default function Dashboard() {
   const [lobbyName, setLobbyName] = useState('')
   const [maxPlayers, setMaxPlayers] = useState(8)
   const [roundCount, setRoundCount] = useState(5)
+  const [gameMode, setGameMode] = useState<'SONGS' | 'ARTISTS'>('SONGS')
+  const [timeRange, setTimeRange] = useState<'SHORT_TERM' | 'MEDIUM_TERM' | 'LONG_TERM'>('SHORT_TERM')
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -50,6 +52,8 @@ export default function Dashboard() {
           name: lobbyName || `${session.user.name}'s Game`,
           maxPlayers,
           roundCount,
+          gameMode,
+          timeRange,
         }),
       })
 
@@ -78,6 +82,8 @@ export default function Dashboard() {
           name: `${session.user.name}'s Game`,
           maxPlayers: 8,
           roundCount: 5,
+          gameMode: 'SONGS',
+          timeRange: 'SHORT_TERM',
         }),
       })
 
@@ -179,6 +185,43 @@ export default function Dashboard() {
                     onChange={(e) => setRoundCount(parseInt(e.target.value))}
                     className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
                   />
+                </div>
+
+                <div>
+                  <label htmlFor="gameMode" className="block text-sm font-medium mb-2">
+                    Game Mode
+                  </label>
+                  <select
+                    id="gameMode"
+                    value={gameMode}
+                    onChange={(e) => setGameMode(e.target.value as 'SONGS' | 'ARTISTS')}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
+                  >
+                    <option value="SONGS">🎵 Guess Songs</option>
+                    <option value="ARTISTS">👤 Guess Artists</option>
+                  </select>
+                  <p className="text-xs text-spotify-gray mt-1">
+                    {gameMode === 'SONGS' ? 'Players guess who likes which songs' : 'Players guess who likes which artists'}
+                  </p>
+                </div>
+
+                <div>
+                  <label htmlFor="timeRange" className="block text-sm font-medium mb-2">
+                    Music Time Range
+                  </label>
+                  <select
+                    id="timeRange"
+                    value={timeRange}
+                    onChange={(e) => setTimeRange(e.target.value as 'SHORT_TERM' | 'MEDIUM_TERM' | 'LONG_TERM')}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
+                  >
+                    <option value="SHORT_TERM">📅 Last 4 weeks</option>
+                    <option value="MEDIUM_TERM">📆 Last 6 months</option>
+                    <option value="LONG_TERM">⏳ All time</option>
+                  </select>
+                  <p className="text-xs text-spotify-gray mt-1">
+                    What time period to use for Spotify top {gameMode === 'SONGS' ? 'tracks' : 'artists'}
+                  </p>
                 </div>
 
                 <div className="flex gap-2">

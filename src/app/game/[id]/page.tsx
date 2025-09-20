@@ -440,28 +440,56 @@ export default function GamePage({ params }: { params: { id: string } }) {
           </div>
         </div>
 
-        {/* Spotify Embed - Hidden during break */}
+        {/* Game Content - Hidden during break */}
         {!isInBreak && (
           <div className="card mb-6">
-            <h2 className="text-xl font-semibold mb-4">
-              {currentRound.trackName} - {currentRound.trackArtist}
-            </h2>
-            <iframe
-              src={getSpotifyEmbedUrl(currentRound.trackUri)}
-              width="100%"
-              height="352"
-              frameBorder="0"
-              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-              loading="lazy"
-              className="rounded-lg"
-            />
+            {(game as any).gameMode === 'ARTISTS' ? (
+              // Artist Mode Display
+              <div className="text-center">
+                <h2 className="text-xl font-semibold mb-4">
+                  {(currentRound as any).artistName}
+                </h2>
+                {(currentRound as any).artistImage && (
+                  <div className="flex justify-center mb-4">
+                    <img
+                      src={(currentRound as any).artistImage}
+                      alt={(currentRound as any).artistName}
+                      className="w-64 h-64 object-cover rounded-lg shadow-lg"
+                    />
+                  </div>
+                )}
+                <p className="text-spotify-gray">
+                  Whose favorite artist is this?
+                </p>
+              </div>
+            ) : (
+              // Song Mode Display (existing functionality)
+              <>
+                <h2 className="text-xl font-semibold mb-4">
+                  {currentRound.trackName} - {currentRound.trackArtist}
+                </h2>
+                <iframe
+                  src={getSpotifyEmbedUrl(currentRound.trackUri)}
+                  width="100%"
+                  height="352"
+                  frameBorder="0"
+                  allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                  loading="lazy"
+                  className="rounded-lg"
+                />
+              </>
+            )}
           </div>
         )}
 
         {/* Player Selection - Hidden during break */}
         {!hasVoted && !showResults && !isInBreak && (
           <div className="card">
-            <h2 className="text-xl font-semibold mb-4">Who do you think this song belongs to?</h2>
+            <h2 className="text-xl font-semibold mb-4">
+              {(game as any).gameMode === 'ARTISTS' 
+                ? 'Who do you think this artist belongs to?' 
+                : 'Who do you think this song belongs to?'}
+            </h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {game.participants.map((participant: any) => (
                 <button

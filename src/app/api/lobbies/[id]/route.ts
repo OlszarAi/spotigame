@@ -40,7 +40,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { maxPlayers, roundCount } = await req.json()
+    const { maxPlayers, roundCount, gameMode, timeRange } = await req.json()
 
     // Find user by email
     const user = await prisma.user.findUnique({
@@ -91,6 +91,14 @@ export async function PATCH(
       return NextResponse.json({ error: 'Round count must be between 1 and 50' }, { status: 400 })
     }
 
+    if (gameMode !== undefined && !['SONGS', 'ARTISTS'].includes(gameMode)) {
+      return NextResponse.json({ error: 'Invalid game mode' }, { status: 400 })
+    }
+
+    if (timeRange !== undefined && !['SHORT_TERM', 'MEDIUM_TERM', 'LONG_TERM'].includes(timeRange)) {
+      return NextResponse.json({ error: 'Invalid time range. Must be SHORT_TERM, MEDIUM_TERM, or LONG_TERM' }, { status: 400 })
+    }
+
     // Check if reducing maxPlayers would kick existing members
     if (maxPlayers !== undefined && maxPlayers < lobby.members.length) {
       return NextResponse.json({ 
@@ -102,6 +110,8 @@ export async function PATCH(
     const updateData: any = {}
     if (maxPlayers !== undefined) updateData.maxPlayers = maxPlayers
     if (roundCount !== undefined) updateData.roundCount = roundCount
+    if (gameMode !== undefined) updateData.gameMode = gameMode
+    if (timeRange !== undefined) updateData.timeRange = timeRange
 
     // Update lobby
     const updatedLobby = await prisma.lobby.update({

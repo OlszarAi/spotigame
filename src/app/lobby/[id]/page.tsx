@@ -22,6 +22,8 @@ interface Lobby {
   hostId: string
   maxPlayers: number
   roundCount: number
+  gameMode: string
+  timeRange: string
   host: {
     id: string
     name: string
@@ -41,6 +43,8 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
   const [isEditingSettings, setIsEditingSettings] = useState(false)
   const [tempMaxPlayers, setTempMaxPlayers] = useState(8)
   const [tempRoundCount, setTempRoundCount] = useState(5)
+  const [tempGameMode, setTempGameMode] = useState<'SONGS' | 'ARTISTS'>('SONGS')
+  const [tempTimeRange, setTempTimeRange] = useState<'SHORT_TERM' | 'MEDIUM_TERM' | 'LONG_TERM'>('SHORT_TERM')
   const [isUpdatingSettings, setIsUpdatingSettings] = useState(false)
 
   console.log('LobbyPage render - status:', status, 'loading:', loading, 'session:', !!session)
@@ -78,6 +82,12 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
             (member: LobbyMember) => member.user.id === session?.user?.id
           )
           setIsReady(currentMember?.isReady || false)
+          
+          // Initialize temporary settings with current lobby values
+          setTempMaxPlayers(lobbyData.maxPlayers)
+          setTempRoundCount(lobbyData.roundCount)
+          setTempGameMode(lobbyData.gameMode)
+          setTempTimeRange(lobbyData.timeRange)
         } else {
           console.error('Failed to fetch lobby, redirecting to dashboard')
           router.push('/dashboard')
@@ -223,6 +233,8 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
         body: JSON.stringify({
           maxPlayers: tempMaxPlayers,
           roundCount: tempRoundCount,
+          gameMode: tempGameMode,
+          timeRange: tempTimeRange,
         }),
       })
 
@@ -247,6 +259,8 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
     if (lobby) {
       setTempMaxPlayers(lobby.maxPlayers)
       setTempRoundCount(lobby.roundCount)
+      setTempGameMode(lobby.gameMode as 'SONGS' | 'ARTISTS')
+      setTempTimeRange(lobby.timeRange as 'SHORT_TERM' | 'MEDIUM_TERM' | 'LONG_TERM')
       setIsEditingSettings(true)
     }
   }
@@ -256,6 +270,8 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
     if (lobby) {
       setTempMaxPlayers(lobby.maxPlayers)
       setTempRoundCount(lobby.roundCount)
+      setTempGameMode(lobby.gameMode as 'SONGS' | 'ARTISTS')
+      setTempTimeRange(lobby.timeRange as 'SHORT_TERM' | 'MEDIUM_TERM' | 'LONG_TERM')
     }
   }
 
@@ -297,6 +313,19 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
             <p className="text-spotify-gray">
               Host: {lobby.host.name} • {lobby.members.length}/{lobby.maxPlayers} players
             </p>
+            <div className="flex gap-4 mt-2 text-sm text-spotify-gray">
+              <span className="flex items-center gap-1">
+                {lobby.gameMode === 'ARTISTS' ? '👤' : '🎵'}
+                {lobby.gameMode === 'ARTISTS' ? 'Artist Mode' : 'Song Mode'}
+              </span>
+              <span className="flex items-center gap-1">
+                {lobby.timeRange === 'SHORT_TERM' ? '📅' : lobby.timeRange === 'MEDIUM_TERM' ? '📆' : '⏳'}
+                {lobby.timeRange === 'SHORT_TERM' ? 'Last 4 weeks' : lobby.timeRange === 'MEDIUM_TERM' ? 'Last 6 months' : 'All time'}
+              </span>
+              <span className="flex items-center gap-1">
+                🎯 {lobby.roundCount} rounds
+              </span>
+            </div>
           </div>
           <button onClick={leaveLobby} className="btn-secondary">
             Leave Lobby
@@ -433,6 +462,43 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
                       onChange={(e) => setTempRoundCount(parseInt(e.target.value))}
                       className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
                     />
+                  </div>
+
+                  <div>
+                    <label htmlFor="gameMode" className="block text-sm font-medium mb-2">
+                      Game Mode
+                    </label>
+                    <select
+                      id="gameMode"
+                      value={tempGameMode}
+                      onChange={(e) => setTempGameMode(e.target.value as 'SONGS' | 'ARTISTS')}
+                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
+                    >
+                      <option value="SONGS">🎵 Guess Songs</option>
+                      <option value="ARTISTS">👤 Guess Artists</option>
+                    </select>
+                    <p className="text-xs text-spotify-gray mt-1">
+                      {tempGameMode === 'SONGS' ? 'Players guess who likes which songs' : 'Players guess who likes which artists'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label htmlFor="timeRange" className="block text-sm font-medium mb-2">
+                      Music Time Range
+                    </label>
+                    <select
+                      id="timeRange"
+                      value={tempTimeRange}
+                      onChange={(e) => setTempTimeRange(e.target.value as 'SHORT_TERM' | 'MEDIUM_TERM' | 'LONG_TERM')}
+                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
+                    >
+                      <option value="SHORT_TERM">📅 Last 4 weeks</option>
+                      <option value="MEDIUM_TERM">📆 Last 6 months</option>
+                      <option value="LONG_TERM">⏳ All time</option>
+                    </select>
+                    <p className="text-xs text-spotify-gray mt-1">
+                      What time period to use for Spotify top {tempGameMode === 'SONGS' ? 'tracks' : 'artists'}
+                    </p>
                   </div>
                 </div>
 

@@ -20,7 +20,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { name, maxPlayers, roundCount } = await req.json()
+    const { name, maxPlayers, roundCount, gameMode = 'SONGS', timeRange = 'SHORT_TERM' } = await req.json()
+
+    // Validate gameMode
+    if (!['SONGS', 'ARTISTS'].includes(gameMode)) {
+      return NextResponse.json({ error: 'Invalid game mode' }, { status: 400 })
+    }
+
+    // Validate timeRange
+    if (!['SHORT_TERM', 'MEDIUM_TERM', 'LONG_TERM'].includes(timeRange)) {
+      return NextResponse.json({ error: 'Invalid time range. Must be SHORT_TERM, MEDIUM_TERM, or LONG_TERM' }, { status: 400 })
+    }
 
     // Find user by email
     const user = await prisma.user.findUnique({
@@ -38,6 +48,8 @@ export async function POST(req: NextRequest) {
         hostId: user.id,
         maxPlayers,
         roundCount,
+        gameMode,
+        timeRange,
       },
       include: {
         host: true,
