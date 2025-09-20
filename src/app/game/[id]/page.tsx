@@ -103,7 +103,7 @@ export default function GamePage({ params }: { params: { id: string } }) {
       return
     }
 
-    if (session?.user?.id) {
+    if ((session as any)?.user?.id) {
       fetchGame()
     }
   }, [session, params.id, router, status])

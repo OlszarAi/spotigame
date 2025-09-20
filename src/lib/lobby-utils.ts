@@ -8,7 +8,7 @@ import { prisma } from './prisma'
  */
 export async function findLobbyByIdOrCode(
   idOrCode: string,
-  includeOptions?: any
+  includeOptions?: object
 ) {
   // If the id is 8 characters or less, treat it as a game code
   if (idOrCode.length <= 8) {

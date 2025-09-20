@@ -26,7 +26,7 @@ export async function POST(
 
     // Single query to get user, game, and current round
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
+      where: { email: (session as any).user.email }
     })
 
     if (!user) {

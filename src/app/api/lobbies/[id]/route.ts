@@ -44,7 +44,7 @@ export async function PATCH(
 
     // Find user by email
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
+      where: { email: (session as any).user.email }
     })
 
     if (!user) {
@@ -100,10 +100,16 @@ export async function PATCH(
     }
 
     // Check if reducing maxPlayers would kick existing members
-    if (maxPlayers !== undefined && maxPlayers < lobby.members.length) {
-      return NextResponse.json({ 
-        error: `Cannot reduce max players to ${maxPlayers} when ${lobby.members.length} players are already in the lobby` 
-      }, { status: 400 })
+    if (maxPlayers !== undefined) {
+      const memberCount = await prisma.lobbyMember.count({
+        where: { lobbyId: lobby.id }
+      })
+      
+      if (maxPlayers < memberCount) {
+        return NextResponse.json({ 
+          error: `Cannot reduce max players to ${maxPlayers} when ${memberCount} players are already in the lobby` 
+        }, { status: 400 })
+      }
     }
 
     // Build update data

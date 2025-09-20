@@ -1,4 +1,3 @@
-import { NextAuthOptions } from 'next-auth'
 import SpotifyProvider from 'next-auth/providers/spotify'
 import { PrismaAdapter } from '@next-auth/prisma-adapter'
 import { prisma } from './prisma'
@@ -15,7 +14,7 @@ const params = {
 
 const LOGIN_URL = 'https://accounts.spotify.com/authorize?' + new URLSearchParams(params).toString()
 
-export const authOptions: NextAuthOptions = {
+export const authOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
     SpotifyProvider({
@@ -27,7 +26,7 @@ export const authOptions: NextAuthOptions = {
   debug: process.env.NODE_ENV === 'development',
   secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
-    async session({ session, token, user }) {
+    async session({ session, token, user }: any) {
       console.log('Session callback called:', { hasToken: !!token, hasUser: !!user })
       
       // Jeśli używamy database sessions, tokeny są w account

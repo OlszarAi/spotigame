@@ -6,12 +6,12 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { 
   PlusIcon, 
-  UserGroupIcon, 
+  UserGroupIcon,
   ArrowRightIcon, 
   Cog6ToothIcon,
   XMarkIcon,
@@ -37,7 +37,7 @@ export default function Dashboard() {
       router.push('/')
     }
     if (session?.user?.name) {
-      setLobbyName(`${session.user.name}'s Game`)
+      setLobbyName(`${(session as any)?.user?.name || 'Player'}'s Game`)
     }
   }, [status, router, session?.user?.name])
 
@@ -62,7 +62,7 @@ export default function Dashboard() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: lobbyName || `${session.user.name}'s Game`,
+          name: lobbyName || `${session?.user?.name || 'Player'}'s Game`,
           maxPlayers,
           roundCount,
           gameMode,
@@ -92,7 +92,7 @@ export default function Dashboard() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: `${session.user.name}'s Game`,
+          name: `${session?.user?.name || 'Player'}'s Game`,
           maxPlayers: 8,
           roundCount: 5,
           gameMode: 'SONGS',
@@ -131,7 +131,7 @@ export default function Dashboard() {
           <div className="space-y-2">
             <h1 className="text-4xl sm:text-5xl font-bold gradient-text">SpotiGame</h1>
             <p className="text-spotify-gray-light text-lg">
-              Welcome back, <span className="text-spotify-white font-medium">{session.user.name}</span>! 🎵
+              Welcome back, <span className="text-spotify-white font-medium">{session?.user?.name}</span>! 🎵
             </p>
           </div>
           <Button
@@ -245,7 +245,7 @@ export default function Dashboard() {
                       label="Lobby Name"
                       value={lobbyName}
                       onChange={(e) => setLobbyName(e.target.value)}
-                      placeholder={`${session.user.name}'s Game`}
+                      placeholder={`${session?.user?.name || 'Player'}'s Game`}
                     />
 
                     <div className="grid grid-cols-2 gap-4">

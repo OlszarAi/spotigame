@@ -26,11 +26,11 @@ export async function POST(
       return NextResponse.json({ error: 'Guessed user ID is required' }, { status: 400 })
     }
 
-    console.log(`[vote] User ${session.user.email} voting for ${guessedUserId} in game ${params.id}`)
+    console.log(`[vote] User ${(session as any).user.email} voting for ${guessedUserId} in game ${params.id}`)
 
     // Single query to get user, game, and current round
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
+      where: { email: (session as any).user.email }
     })
 
     if (!user) {

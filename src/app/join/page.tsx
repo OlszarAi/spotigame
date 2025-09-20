@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/Input'
 import { ArrowLeftIcon, UserGroupIcon, HashtagIcon } from '@heroicons/react/24/outline'
 
 export default function JoinLobby() {
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const router = useRouter()
   const [gameCode, setGameCode] = useState('')
   const [isJoining, setIsJoining] = useState(false)

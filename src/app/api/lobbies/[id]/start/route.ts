@@ -18,7 +18,7 @@ export async function POST(
 
     // Find user by email
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
+      where: { email: (session as any).user.email }
     })
 
     if (!user) {
@@ -46,13 +46,17 @@ export async function POST(
       return NextResponse.json({ error: 'Only host can start the game' }, { status: 403 })
     }
 
-    // Check if all members are ready
-    const allReady = lobby.members.every((member: any) => member.isReady)
+    // Check if all members are ready and count them
+    const members = await prisma.lobbyMember.findMany({
+      where: { lobbyId: lobby.id }
+    })
+    
+    const allReady = members.every(member => member.isReady)
     if (!allReady) {
       return NextResponse.json({ error: 'All players must be ready' }, { status: 400 })
     }
 
-    if (lobby.members.length < 2) {
+    if (members.length < 2) {
       return NextResponse.json({ error: 'Need at least 2 players' }, { status: 400 })
     }
 
@@ -71,11 +75,11 @@ export async function POST(
     })
 
     // Add participants
-    for (const member of lobby.members) {
+    for (const member of members) {
       await prisma.gameParticipant.create({
         data: {
           gameId: game.id,
-          userId: (member as any).userId
+          userId: member.userId
         }
       })
     }
@@ -87,16 +91,27 @@ export async function POST(
       artists?: any[]
     }> = []
 
-    for (const member of lobby.members) {
-      const memberWithUser = member as any;
-      const spotifyAccount = memberWithUser.user.accounts.find(
+    // Get members with their user accounts
+    const membersWithAccounts = await prisma.lobbyMember.findMany({
+      where: { lobbyId: lobby.id },
+      include: {
+        user: {
+          include: {
+            accounts: true
+          }
+        }
+      }
+    })
+    
+    for (const member of membersWithAccounts) {
+      const spotifyAccount = member.user.accounts.find(
         (account: any) => account.provider === 'spotify'
       )
 
-      if (spotifyAccount) {
+      if (spotifyAccount && spotifyAccount.access_token) {
         try {
           // Get valid access token (with automatic refresh if needed)
-          const validToken = await getValidAccessToken(spotifyAccount, prisma)
+          const validToken = await getValidAccessToken(spotifyAccount as any, prisma)
           
           if (validToken) {
             const spotifyTimeRange = timeRangeToSpotifyParam(lobby.timeRange)
@@ -106,7 +121,7 @@ export async function POST(
               const artists = await getTopArtists(validToken, 50, spotifyTimeRange)
               
               playerData.push({
-                playerId: memberWithUser.userId,
+                playerId: member.userId,
                 artists: artists
               })
             } else {
@@ -114,23 +129,23 @@ export async function POST(
               const tracks = await getTopTracks(validToken, 50, spotifyTimeRange)
               
               playerData.push({
-                playerId: memberWithUser.userId,
+                playerId: member.userId,
                 tracks: tracks
               })
             }
           } else {
-            console.error(`Could not get valid token for user ${memberWithUser.userId}`)
+            console.error(`Could not get valid token for user ${member.userId}`)
           }
         } catch (error) {
-          console.error(`Error fetching ${lobby.gameMode === 'ARTISTS' ? 'artists' : 'tracks'} for user ${memberWithUser.userId}:`, error)
+          console.error(`Error fetching ${lobby.gameMode === 'ARTISTS' ? 'artists' : 'tracks'} for user ${member.userId}:`, error)
         }
       } else {
-        console.log(`No Spotify account found for user ${memberWithUser.userId}`)
+        console.log(`No Spotify account found for user ${member.userId}`)
       }
     }
 
     // Check if we have data from all players
-    if (playerData.length !== lobby.members.length) {
+    if (playerData.length !== members.length) {
       return NextResponse.json({ 
         error: `Could not fetch ${lobby.gameMode === 'ARTISTS' ? 'artists' : 'tracks'} from all players. Please ensure all players have valid Spotify connections and try again.` 
       }, { status: 400 })

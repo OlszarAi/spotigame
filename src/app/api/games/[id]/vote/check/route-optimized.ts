@@ -26,7 +26,7 @@ export async function GET(
 
     // Find user by email - cache this too if needed
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: (session as any).user.email },
       select: { id: true } // Only get what we need
     })
 
@@ -122,7 +122,7 @@ export async function POST(
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: { email: (session as any).user.email },
       select: { id: true }
     })
 

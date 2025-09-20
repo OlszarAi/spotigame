@@ -73,7 +73,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenRef
   }
 }
 
-export async function getValidAccessToken(account: any, prisma: any): Promise<string | null> {
+export async function getValidAccessToken(account: { access_token: string; expires_at?: number; refresh_token?: string; id: string }, prisma: { account: { update: (params: { where: { id: string }; data: { access_token: string; expires_at?: number; refresh_token?: string } }) => Promise<unknown> } }): Promise<string | null> {
   try {
     // Check if token is still valid (expires_at is in seconds, Date.now() is in ms)
     const now = Math.floor(Date.now() / 1000)
@@ -84,11 +84,11 @@ export async function getValidAccessToken(account: any, prisma: any): Promise<st
 
     // Token expired or will expire soon, refresh it
     if (!account.refresh_token) {
-      console.error('No refresh token available for user:', account.userId)
+      console.error('No refresh token available for user:', account.id)
       return null
     }
 
-    console.log('Refreshing Spotify token for user:', account.userId)
+    console.log('Refreshing Spotify token for user:', account.id)
     const refreshedTokens = await refreshAccessToken(account.refresh_token)
     
     // Update account with new tokens

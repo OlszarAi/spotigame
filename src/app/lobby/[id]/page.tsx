@@ -86,7 +86,7 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
           setLobby(lobbyData)
           
           const currentMember = lobbyData.members.find(
-            (member: LobbyMember) => member.user.id === session?.user?.id
+            (member: LobbyMember) => member.user.id === (session as any)?.user?.id
           )
           setIsReady(currentMember?.isReady || false)
           
@@ -315,7 +315,7 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
     )
   }
 
-  const isHost = lobby.hostId === session?.user?.id
+  const isHost = lobby.hostId === (session as any)?.user?.id
   const allReady = lobby.members.every(member => member.isReady)
   const canStart = isHost && lobby.members.length >= 2 && allReady
 
@@ -638,10 +638,10 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
                             {member.userId === lobby.hostId && (
                               <span className="text-spotify-green font-medium">Host</span>
                             )}
-                            {member.userId === lobby.hostId && member.userId !== session?.user?.id && (
+                            {member.userId === lobby.hostId && member.userId !== (session as any)?.user?.id && (
                               <span className="text-spotify-gray">•</span>
                             )}
-                            {member.userId === session?.user?.id && (
+                            {member.userId === (session as any)?.user?.id && (
                               <span className="text-spotify-blue font-medium">You</span>
                             )}
                           </div>

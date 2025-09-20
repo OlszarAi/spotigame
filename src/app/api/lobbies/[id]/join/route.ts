@@ -26,7 +26,7 @@ export async function POST(
 
     // Find user by email
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email }
+      where: { email: (session as any).user.email }
     })
 
     if (!user) {
@@ -47,7 +47,11 @@ export async function POST(
     }
 
     // Check if lobby is full
-    if (lobby.members.length >= lobby.maxPlayers) {
+    const memberCount = await prisma.lobbyMember.count({
+      where: { lobbyId: lobby.id }
+    })
+    
+    if (memberCount >= lobby.maxPlayers) {
       return NextResponse.json({ error: 'Lobby is full' }, { status: 400 })
     }
 
