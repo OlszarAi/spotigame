@@ -5,6 +5,34 @@ import { prisma } from '@/lib/prisma'
 import { pusherServer } from '@/lib/pusher'
 import { DatabaseCleanupService } from '@/lib/cleanup-service'
 
+// Generate 8-character alphanumeric code
+function generateGameCode(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let result = ''
+  for (let i = 0; i < 8; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
+
+// Generate unique game code
+async function generateUniqueGameCode(): Promise<string> {
+  let code: string
+  let attempts = 0
+  const maxAttempts = 10
+  
+  do {
+    code = generateGameCode()
+    const existing = await prisma.lobby.findUnique({ where: { code } })
+    if (!existing) {
+      return code
+    }
+    attempts++
+  } while (attempts < maxAttempts)
+  
+  throw new Error('Could not generate unique game code')
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Perform cleanup occasionally (10% chance) to avoid performance impact
@@ -41,9 +69,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
+    // Generate unique game code
+    const gameCode = await generateUniqueGameCode()
+
     // Create lobby
     const lobby = await prisma.lobby.create({
       data: {
+        code: gameCode,
         name,
         hostId: user.id,
         maxPlayers,

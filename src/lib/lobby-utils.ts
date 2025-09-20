@@ -12,17 +12,13 @@ export async function findLobbyByIdOrCode(
 ) {
   // If the id is 8 characters or less, treat it as a game code
   if (idOrCode.length <= 8) {
-    // Search for lobby by game code (first 8 characters of id)
-    const lobbies = await prisma.lobby.findMany({
+    // Search for lobby by game code
+    return await prisma.lobby.findUnique({
       where: {
-        isActive: true,
-        id: {
-          startsWith: idOrCode.toLowerCase()
-        }
+        code: idOrCode.toUpperCase()
       },
       include: includeOptions
     })
-    return lobbies[0] || null // Take the first match
   } else {
     // Use full ID lookup
     return await prisma.lobby.findUnique({

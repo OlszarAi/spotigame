@@ -66,6 +66,7 @@ model VerificationToken {
 
 model Lobby {
   id          String   @id @default(cuid())
+  code        String   @unique // 8-character game code
   name        String
   hostId      String
   isActive    Boolean  @default(true)

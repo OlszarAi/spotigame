@@ -1,10 +1,33 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import { pusherClient } from '@/lib/pusher'
 import { getSpotifyEmbedUrl } from '@/lib/spotify'
+import { Button } from '@/components/ui/Button'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card'
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { ProgressBar, TimerProgress } from '@/components/ui/ProgressBar'
+import { 
+  PlayIcon, 
+  PauseIcon,
+  TrophyIcon,
+  UserGroupIcon,
+  ClockIcon,
+  MusicalNoteIcon,
+  CheckCircleIcon,
+  XMarkIcon,
+  ArrowLeftIcon,
+  StarIcon,
+  ArrowPathIcon
+} from '@heroicons/react/24/outline'
+import { 
+  CheckCircleIcon as CheckCircleIconSolid,
+  XCircleIcon as XCircleIconSolid,
+  TrophyIcon as TrophyIconSolid
+} from '@heroicons/react/24/solid'
 
 interface Player {
   id: string

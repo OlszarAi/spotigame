@@ -1,9 +1,30 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
 import { pusherClient } from '@/lib/pusher'
+import { Button } from '@/components/ui/Button'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card'
+import { Input } from '@/components/ui/Input'
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { 
+  UserGroupIcon, 
+  CogIcon, 
+  CheckIcon, 
+  XMarkIcon,
+  ArrowLeftIcon,
+  ClipboardDocumentIcon,
+  PlayIcon,
+  UserIcon,
+  MusicalNoteIcon,
+  ClockIcon,
+  Cog6ToothIcon,
+  ArrowPathIcon,
+  LinkIcon
+} from '@heroicons/react/24/outline'
+import { CheckCircleIcon } from '@heroicons/react/24/solid'
 
 interface LobbyMember {
   id: string
@@ -18,6 +39,7 @@ interface LobbyMember {
 
 interface Lobby {
   id: string
+  code: string
   name: string
   hostId: string
   maxPlayers: number
@@ -32,8 +54,6 @@ interface Lobby {
 }
 
 export default function LobbyPage({ params }: { params: { id: string } }) {
-  console.log('LobbyPage component loaded with params:', params)
-  
   const { data: session, status } = useSession()
   const router = useRouter()
   const [lobby, setLobby] = useState<Lobby | null>(null)
@@ -47,15 +67,6 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
   const [tempTimeRange, setTempTimeRange] = useState<'SHORT_TERM' | 'MEDIUM_TERM' | 'LONG_TERM'>('SHORT_TERM')
   const [isUpdatingSettings, setIsUpdatingSettings] = useState(false)
 
-  console.log('LobbyPage render - status:', status, 'loading:', loading, 'session:', !!session)
-  if (session) {
-    console.log('Session details:', { 
-      user: session.user, 
-      hasUserId: !!session.user?.id,
-      userKeys: Object.keys(session.user || {})
-    })
-  }
-
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/')
@@ -63,33 +74,27 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
     }
 
     if (status === 'loading') {
-      return // Wait for session to load
+      return
     }
 
     const fetchLobby = async () => {
       try {
-        console.log('Fetching lobby:', params.id)
         const response = await fetch(`/api/lobbies/${params.id}`)
-        console.log('Response status:', response.status)
         
         if (response.ok) {
           const lobbyData = await response.json()
-          console.log('Lobby data:', lobbyData)
           setLobby(lobbyData)
           
-          // Check if current user is ready
           const currentMember = lobbyData.members.find(
             (member: LobbyMember) => member.user.id === session?.user?.id
           )
           setIsReady(currentMember?.isReady || false)
           
-          // Initialize temporary settings with current lobby values
           setTempMaxPlayers(lobbyData.maxPlayers)
           setTempRoundCount(lobbyData.roundCount)
           setTempGameMode(lobbyData.gameMode)
           setTempTimeRange(lobbyData.timeRange)
         } else {
-          console.error('Failed to fetch lobby, redirecting to dashboard')
           router.push('/dashboard')
         }
       } catch (error) {
@@ -100,40 +105,29 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
       }
     }
 
-    if (session?.user?.id) {
-      console.log('Session user ID found:', session.user.id, 'Starting fetchLobby')
-      fetchLobby()
-    } else {
-      console.log('No session user ID found. Session:', session)
-    }
+    fetchLobby()
   }, [session, params.id, router, status])
 
   useEffect(() => {
     if (!lobby) return
 
-    console.log('Setting up Pusher subscription for lobby:', lobby.id)
-    
-    // Subscribe to lobby updates
     const channel = pusherClient.subscribe(`lobby-${lobby.id}`)
     
     channel.bind('member-joined', (data: { member: LobbyMember }) => {
-      console.log('Member joined:', data)
       setLobby(prev => prev ? {
         ...prev,
         members: [...prev.members, data.member]
       } : null)
     })
-    
+
     channel.bind('member-left', (data: { userId: string }) => {
-      console.log('Member left:', data)
       setLobby(prev => prev ? {
         ...prev,
         members: prev.members.filter(member => member.userId !== data.userId)
       } : null)
     })
-    
+
     channel.bind('member-ready-changed', (data: { userId: string, isReady: boolean }) => {
-      console.log('Member ready changed:', data)
       setLobby(prev => prev ? {
         ...prev,
         members: prev.members.map(member => 
@@ -142,73 +136,80 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
             : member
         )
       } : null)
-      
-      if (data.userId === session?.user?.id) {
-        setIsReady(data.isReady)
-      }
-    })
-    
-    channel.bind('game-starting', () => {
-      console.log('Game starting')
-      setGameStarting(true)
-    })
-    
-    channel.bind('game-started', (data: { gameId: string }) => {
-      router.push(`/game/${data.gameId}`)
     })
 
-    channel.bind('lobby-settings-updated', (data: { lobby: Lobby, changes: any }) => {
-      console.log('Lobby settings updated:', data)
+    channel.bind('lobby-settings-updated', (data: { lobby: Lobby }) => {
       setLobby(data.lobby)
-      if (isEditingSettings) {
-        setIsEditingSettings(false)
-      }
+      setTempMaxPlayers(data.lobby.maxPlayers)
+      setTempRoundCount(data.lobby.roundCount)
+      setTempGameMode(data.lobby.gameMode as 'SONGS' | 'ARTISTS')
+      setTempTimeRange(data.lobby.timeRange as 'SHORT_TERM' | 'MEDIUM_TERM' | 'LONG_TERM')
+    })
+
+    channel.bind('game-starting', () => {
+      setGameStarting(true)
+    })
+
+    channel.bind('game-started', (data: { gameId: string }) => {
+      router.push(`/game/${data.gameId}`)
     })
 
     return () => {
       pusherClient.unsubscribe(`lobby-${lobby.id}`)
     }
-  }, [lobby, session?.user?.id, router])
+  }, [lobby, router])
 
   const toggleReady = async () => {
-    if (!lobby || !session?.user?.id) return
-
+    if (!lobby) return
+    
     try {
       const response = await fetch(`/api/lobbies/${lobby.id}/ready`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ isReady: !isReady }),
+        body: JSON.stringify({
+          isReady: !isReady
+        }),
       })
 
-      if (!response.ok) {
-        console.error('Failed to toggle ready status')
+      if (response.ok) {
+        const data = await response.json()
+        setIsReady(data.isReady)
       }
     } catch (error) {
-      console.error('Error toggling ready:', error)
+      console.error('Error toggling ready state:', error)
     }
   }
 
   const startGame = async () => {
-    if (!lobby || !session?.user?.id || lobby.hostId !== session.user.id) return
-
+    if (!lobby) return
+    
+    setGameStarting(true)
     try {
       const response = await fetch(`/api/lobbies/${lobby.id}/start`, {
         method: 'POST',
       })
 
-      if (!response.ok) {
-        console.error('Failed to start game')
+      if (response.ok) {
+        const data = await response.json()
+        router.push(`/game/${data.gameId}`)
+      } else {
+        const errorData = await response.json()
+        console.error('Failed to start game:', errorData.error)
+        alert(errorData.error || 'Failed to start game')
       }
     } catch (error) {
       console.error('Error starting game:', error)
+      alert('Error starting game')
+    } finally {
+      setGameStarting(false)
     }
   }
 
   const leaveLobby = async () => {
-    if (!lobby || !session?.user?.id) return
-
+    if (!lobby) return
+    
     try {
       await fetch(`/api/lobbies/${lobby.id}/leave`, {
         method: 'POST',
@@ -221,8 +222,8 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
   }
 
   const updateLobbySettings = async () => {
-    if (!lobby || !session?.user?.id) return
-
+    if (!lobby) return
+    
     setIsUpdatingSettings(true)
     try {
       const response = await fetch(`/api/lobbies/${lobby.id}`, {
@@ -275,26 +276,41 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
     }
   }
 
+  const copyToClipboard = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(lobby?.code || '')
+    } catch (err) {
+      console.error('Failed to copy: ', err)
+    }
+  }, [lobby?.code])
+
   if (status === 'loading' || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-spotify-green mx-auto"></div>
-          <p className="mt-4 text-spotify-gray">Loading lobby...</p>
-        </div>
+        <LoadingSpinner size="lg" variant="dots" text="Loading lobby..." />
       </div>
     )
   }
 
   if (!lobby) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-red-500 mb-4">Lobby not found</h1>
-          <button onClick={() => router.push('/dashboard')} className="btn-primary">
+      <div className="min-h-screen flex items-center justify-center mobile-safe-area">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center space-y-6"
+        >
+          <div className="w-16 h-16 bg-spotify-red/10 rounded-2xl flex items-center justify-center mx-auto">
+            <XMarkIcon className="w-8 h-8 text-spotify-red" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-spotify-red mb-2">Lobby not found</h1>
+            <p className="text-spotify-gray">This lobby may have been deleted or the code is incorrect.</p>
+          </div>
+          <Button onClick={() => router.push('/dashboard')} size="lg">
             Back to Dashboard
-          </button>
-        </div>
+          </Button>
+        </motion.div>
       </div>
     )
   }
@@ -304,244 +320,474 @@ export default function LobbyPage({ params }: { params: { id: string } }) {
   const canStart = isHost && lobby.members.length >= 2 && allReady
 
   return (
-    <div className="min-h-screen p-4">
-      <div className="max-w-4xl mx-auto">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      className="min-h-screen mobile-safe-area"
+    >
+      <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-spotify-green">{lobby.name}</h1>
-            <p className="text-spotify-gray">
-              Host: {lobby.host.name} • {lobby.members.length}/{lobby.maxPlayers} players
-            </p>
-            <div className="flex gap-4 mt-2 text-sm text-spotify-gray">
+        <motion.header
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.6 }}
+          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-6"
+        >
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => router.push('/dashboard')}
+                variant="ghost"
+                size="sm"
+                icon={<ArrowLeftIcon className="w-4 h-4" />}
+                className="sm:hidden"
+              />
+              <h1 className="text-3xl sm:text-4xl font-bold gradient-text">{lobby.name}</h1>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-spotify-gray">
               <span className="flex items-center gap-1">
-                {lobby.gameMode === 'ARTISTS' ? '👤' : '🎵'}
-                {lobby.gameMode === 'ARTISTS' ? 'Artist Mode' : 'Song Mode'}
+                <UserIcon className="w-4 h-4" />
+                Host: {lobby.host.name}
               </span>
+              <span>•</span>
               <span className="flex items-center gap-1">
-                {lobby.timeRange === 'SHORT_TERM' ? '📅' : lobby.timeRange === 'MEDIUM_TERM' ? '📆' : '⏳'}
-                {lobby.timeRange === 'SHORT_TERM' ? 'Last 4 weeks' : lobby.timeRange === 'MEDIUM_TERM' ? 'Last 6 months' : 'All time'}
-              </span>
-              <span className="flex items-center gap-1">
-                🎯 {lobby.roundCount} rounds
+                <UserGroupIcon className="w-4 h-4" />
+                {lobby.members.length}/{lobby.maxPlayers} players
               </span>
             </div>
           </div>
-          <button onClick={leaveLobby} className="btn-secondary">
-            Leave Lobby
-          </button>
-        </div>
-
-        {gameStarting && (
-          <div className="card mb-8 bg-green-900 border-green-700">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-spotify-green mx-auto mb-4"></div>
-              <h2 className="text-xl font-semibold text-green-400">Game Starting!</h2>
-              <p className="text-green-300">Please wait while we prepare your tracks...</p>
-            </div>
-          </div>
-        )}
-
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Members */}
-          <div className="card">
-            <h2 className="text-xl font-semibold mb-4">Players</h2>
-            <div className="space-y-3">
-              {lobby.members.map((member) => (
-                <div key={member.id} className="flex items-center justify-between p-3 bg-zinc-800 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    {member.user.image && (
-                      <img 
-                        src={member.user.image} 
-                        alt={member.user.name} 
-                        className="w-8 h-8 rounded-full"
-                      />
-                    )}
-                    <div>
-                      <p className="font-medium">{member.user.name}</p>
-                      {member.userId === lobby.hostId && (
-                        <p className="text-sm text-spotify-green">Host</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    member.isReady 
-                      ? 'bg-green-800 text-green-200' 
-                      : 'bg-red-800 text-red-200'
-                  }`}>
-                    {member.isReady ? 'Ready' : 'Not Ready'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Controls */}
-          <div className="card">
-            <h2 className="text-xl font-semibold mb-4">Game Settings</h2>
-            
-            {!isEditingSettings ? (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="text-spotify-gray">Rounds: {lobby.roundCount}</p>
-                    <p className="text-spotify-gray">Max Players: {lobby.maxPlayers}</p>
-                  </div>
-                  {isHost && (
-                    <button
-                      onClick={handleEditSettings}
-                      disabled={gameStarting}
-                      className="btn-secondary text-sm px-3 py-1"
-                    >
-                      Edit Settings
-                    </button>
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  <button
-                    onClick={toggleReady}
-                    disabled={gameStarting}
-                    className={`w-full py-3 px-6 rounded-lg font-semibold transition-colors ${
-                      isReady
-                        ? 'bg-red-600 hover:bg-red-700 text-white'
-                        : 'bg-green-600 hover:bg-green-700 text-white'
-                    }`}
-                  >
-                    {isReady ? 'Not Ready' : 'Ready'}
-                  </button>
-
-                  {isHost && (
-                    <button
-                      onClick={startGame}
-                      disabled={!canStart || gameStarting}
-                      className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {gameStarting ? 'Starting...' : 'Start Game'}
-                    </button>
-                  )}
-
-                  {!canStart && isHost && (
-                    <p className="text-sm text-spotify-gray text-center">
-                      {lobby.members.length < 2 
-                        ? 'Need at least 2 players to start'
-                        : 'All players must be ready to start'
-                      }
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="space-y-3">
-                  <div>
-                    <label htmlFor="maxPlayers" className="block text-sm font-medium mb-2">
-                      Max Players ({lobby.members.length} currently in lobby)
-                    </label>
-                    <input
-                      type="number"
-                      id="maxPlayers"
-                      min={Math.max(2, lobby.members.length)}
-                      max="12"
-                      value={tempMaxPlayers}
-                      onChange={(e) => setTempMaxPlayers(parseInt(e.target.value))}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="roundCount" className="block text-sm font-medium mb-2">
-                      Number of Rounds
-                    </label>
-                    <input
-                      type="number"
-                      id="roundCount"
-                      min="1"
-                      max="50"
-                      value={tempRoundCount}
-                      onChange={(e) => setTempRoundCount(parseInt(e.target.value))}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="gameMode" className="block text-sm font-medium mb-2">
-                      Game Mode
-                    </label>
-                    <select
-                      id="gameMode"
-                      value={tempGameMode}
-                      onChange={(e) => setTempGameMode(e.target.value as 'SONGS' | 'ARTISTS')}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
-                    >
-                      <option value="SONGS">🎵 Guess Songs</option>
-                      <option value="ARTISTS">👤 Guess Artists</option>
-                    </select>
-                    <p className="text-xs text-spotify-gray mt-1">
-                      {tempGameMode === 'SONGS' ? 'Players guess who likes which songs' : 'Players guess who likes which artists'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label htmlFor="timeRange" className="block text-sm font-medium mb-2">
-                      Music Time Range
-                    </label>
-                    <select
-                      id="timeRange"
-                      value={tempTimeRange}
-                      onChange={(e) => setTempTimeRange(e.target.value as 'SHORT_TERM' | 'MEDIUM_TERM' | 'LONG_TERM')}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:border-spotify-green focus:outline-none"
-                    >
-                      <option value="SHORT_TERM">📅 Last 4 weeks</option>
-                      <option value="MEDIUM_TERM">📆 Last 6 months</option>
-                      <option value="LONG_TERM">⏳ All time</option>
-                    </select>
-                    <p className="text-xs text-spotify-gray mt-1">
-                      What time period to use for Spotify top {tempGameMode === 'SONGS' ? 'tracks' : 'artists'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={updateLobbySettings}
-                    disabled={isUpdatingSettings}
-                    className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isUpdatingSettings ? 'Saving...' : 'Save Changes'}
-                  </button>
-                  <button
-                    onClick={cancelEditSettings}
-                    disabled={isUpdatingSettings}
-                    className="btn-secondary flex-1"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
+          
+          <div className="flex gap-2">
+            <Button
+              onClick={() => router.push('/dashboard')}
+              variant="ghost"
+              size="sm"
+              icon={<ArrowLeftIcon className="w-4 h-4" />}
+              className="hidden sm:flex"
+            >
+              Back
+            </Button>
+            {isHost && (
+              <Button
+                onClick={handleEditSettings}
+                variant="secondary"
+                size="sm"
+                icon={<Cog6ToothIcon className="w-4 h-4" />}
+              >
+                Settings
+              </Button>
             )}
           </div>
-        </div>
+        </motion.header>
 
-        {/* Game Code */}
-        <div className="card mt-6">
-          <h2 className="text-xl font-semibold mb-4">Invite Friends</h2>
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <p className="text-spotify-gray mb-2">Game Code:</p>
-              <code className="bg-zinc-800 px-4 py-2 rounded-lg text-spotify-green font-mono text-lg">
-                {lobby.id.slice(0, 8).toUpperCase()}
-              </code>
-            </div>
-            <button
-              onClick={() => navigator.clipboard.writeText(lobby.id.slice(0, 8).toUpperCase())}
-              className="btn-secondary"
+        {/* Game Info & Code */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.6 }}
+          className="grid grid-cols-1 lg:grid-cols-3 gap-4"
+        >
+          {/* Game Code */}
+          <Card variant="elevated" className="lg:col-span-1">
+            <CardHeader className="text-center">
+              <CardTitle className="flex items-center justify-center gap-2">
+                <LinkIcon className="w-5 h-5 text-spotify-green" />
+                Game Code
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-center">
+              <div className="space-y-4">
+                <div className="bg-background-tertiary rounded-xl p-4">
+                  <code className="text-2xl font-mono tracking-widest text-spotify-green font-bold">
+                    {lobby.code}
+                  </code>
+                </div>
+                <Button
+                  onClick={copyToClipboard}
+                  variant="outline"
+                  size="sm"
+                  icon={<ClipboardDocumentIcon className="w-4 h-4" />}
+                  className="w-full"
+                >
+                  Copy Code
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Game Settings */}
+          <Card variant="glow" className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Cog6ToothIcon className="w-5 h-5 text-spotify-blue" />
+                Game Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <AnimatePresence mode="wait">
+                {!isEditingSettings ? (
+                  <motion.div
+                    key="settings-display"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+                  >
+                    <div className="flex items-center gap-3 p-3 bg-background-tertiary rounded-xl">
+                      {lobby.gameMode === 'ARTISTS' ? (
+                        <UserIcon className="w-6 h-6 text-spotify-purple" />
+                      ) : (
+                        <MusicalNoteIcon className="w-6 h-6 text-spotify-green" />
+                      )}
+                      <div>
+                        <p className="font-medium text-spotify-white">
+                          {lobby.gameMode === 'ARTISTS' ? 'Artist Mode' : 'Song Mode'}
+                        </p>
+                        <p className="text-xs text-spotify-gray">Game Type</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 p-3 bg-background-tertiary rounded-xl">
+                      <ClockIcon className="w-6 h-6 text-spotify-orange" />
+                      <div>
+                        <p className="font-medium text-spotify-white">
+                          {lobby.timeRange === 'SHORT_TERM' ? 'Last 4 weeks' : 
+                           lobby.timeRange === 'MEDIUM_TERM' ? 'Last 6 months' : 'All time'}
+                        </p>
+                        <p className="text-xs text-spotify-gray">Time Range</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 p-3 bg-background-tertiary rounded-xl">
+                      <PlayIcon className="w-6 h-6 text-spotify-blue" />
+                      <div>
+                        <p className="font-medium text-spotify-white">{lobby.roundCount} rounds</p>
+                        <p className="text-xs text-spotify-gray">Game Length</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="settings-edit"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="space-y-4"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Input
+                        label="Max Players"
+                        type="number"
+                        min="2"
+                        max="12"
+                        value={tempMaxPlayers.toString()}
+                        onChange={(e) => setTempMaxPlayers(parseInt(e.target.value))}
+                        icon={<UserGroupIcon className="w-4 h-4" />}
+                      />
+                      <Input
+                        label="Rounds"
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={tempRoundCount.toString()}
+                        onChange={(e) => setTempRoundCount(parseInt(e.target.value))}
+                        icon={<ClockIcon className="w-4 h-4" />}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-spotify-white mb-2">
+                          Game Mode
+                        </label>
+                        <select
+                          value={tempGameMode}
+                          onChange={(e) => setTempGameMode(e.target.value as 'SONGS' | 'ARTISTS')}
+                          className="input-primary"
+                        >
+                          <option value="SONGS">🎵 Guess Songs</option>
+                          <option value="ARTISTS">👤 Guess Artists</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-spotify-white mb-2">
+                          Time Range
+                        </label>
+                        <select
+                          value={tempTimeRange}
+                          onChange={(e) => setTempTimeRange(e.target.value as 'SHORT_TERM' | 'MEDIUM_TERM' | 'LONG_TERM')}
+                          className="input-primary"
+                        >
+                          <option value="SHORT_TERM">📅 Last 4 weeks</option>
+                          <option value="MEDIUM_TERM">📆 Last 6 months</option>
+                          <option value="LONG_TERM">⏳ All time</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <Button
+                        onClick={updateLobbySettings}
+                        loading={isUpdatingSettings}
+                        icon={<CheckIcon className="w-4 h-4" />}
+                        className="flex-1"
+                      >
+                        Save Changes
+                      </Button>
+                      <Button
+                        onClick={cancelEditSettings}
+                        variant="secondary"
+                        icon={<XMarkIcon className="w-4 h-4" />}
+                        className="flex-1"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Game Starting State */}
+        <AnimatePresence>
+          {gameStarting && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.3 }}
             >
-              Copy Code
-            </button>
-          </div>
-        </div>
+              <Card variant="glow" className="border-spotify-green bg-spotify-green/5">
+                <CardContent className="text-center py-8">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    className="w-12 h-12 mx-auto mb-4"
+                  >
+                    <ArrowPathIcon className="w-12 h-12 text-spotify-green" />
+                  </motion.div>
+                  <h2 className="text-xl font-semibold text-spotify-green mb-2">Game Starting!</h2>
+                  <p className="text-spotify-gray">Please wait while we prepare your tracks...</p>
+                </CardContent>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Players and Controls */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.6 }}
+          className="grid lg:grid-cols-3 gap-6"
+        >
+          {/* Players List */}
+          <Card variant="elevated" className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <UserGroupIcon className="w-5 h-5 text-spotify-green" />
+                  Players ({lobby.members.length}/{lobby.maxPlayers})
+                </span>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-spotify-gray">
+                    {lobby.members.filter(m => m.isReady).length} ready
+                  </span>
+                  {allReady && lobby.members.length >= 2 && (
+                    <CheckCircleIcon className="w-4 h-4 text-spotify-green" />
+                  )}
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <AnimatePresence>
+                  {lobby.members.map((member, index) => (
+                    <motion.div
+                      key={member.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="flex items-center justify-between p-4 bg-background-tertiary rounded-xl hover:bg-background-tertiary/80 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          {member.user.image ? (
+                            <img 
+                              src={member.user.image} 
+                              alt={member.user.name} 
+                              className="w-10 h-10 rounded-full border-2 border-border"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-spotify-gray/20 flex items-center justify-center border-2 border-border">
+                              <UserIcon className="w-5 h-5 text-spotify-gray" />
+                            </div>
+                          )}
+                          <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-background-tertiary ${
+                            member.isReady ? 'bg-spotify-green' : 'bg-spotify-gray'
+                          }`} />
+                        </div>
+                        <div>
+                          <p className="font-medium text-spotify-white">{member.user.name}</p>
+                          <div className="flex items-center gap-2 text-sm">
+                            {member.userId === lobby.hostId && (
+                              <span className="text-spotify-green font-medium">Host</span>
+                            )}
+                            {member.userId === lobby.hostId && member.userId !== session?.user?.id && (
+                              <span className="text-spotify-gray">•</span>
+                            )}
+                            {member.userId === session?.user?.id && (
+                              <span className="text-spotify-blue font-medium">You</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <motion.div 
+                        initial={{ scale: 0.8 }}
+                        animate={{ scale: 1 }}
+                        className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
+                          member.isReady 
+                            ? 'bg-spotify-green/20 text-spotify-green border border-spotify-green/30' 
+                            : 'bg-spotify-gray/20 text-spotify-gray border border-spotify-gray/30'
+                        }`}
+                      >
+                        {member.isReady ? (
+                          <>
+                            <CheckCircleIcon className="w-4 h-4" />
+                            Ready
+                          </>
+                        ) : (
+                          <>
+                            <ClockIcon className="w-4 h-4" />
+                            Waiting
+                          </>
+                        )}
+                      </motion.div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+              
+              {lobby.members.length < lobby.maxPlayers && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.5 }}
+                  className="mt-4 p-4 border-2 border-dashed border-border rounded-xl text-center"
+                >
+                  <UserGroupIcon className="w-8 h-8 text-spotify-gray mx-auto mb-2" />
+                  <p className="text-sm text-spotify-gray">
+                    Waiting for {lobby.maxPlayers - lobby.members.length} more player{lobby.maxPlayers - lobby.members.length !== 1 ? 's' : ''}
+                  </p>
+                  <p className="text-xs text-spotify-gray mt-1">
+                    Share the game code with your friends!
+                  </p>
+                </motion.div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Game Controls */}
+          <Card variant="elevated">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PlayIcon className="w-5 h-5 text-spotify-blue" />
+                Game Controls
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Button
+                    onClick={toggleReady}
+                    disabled={gameStarting}
+                    variant={isReady ? "danger" : "primary"}
+                    size="lg"
+                    className="w-full"
+                    icon={isReady ? <XMarkIcon className="w-5 h-5" /> : <CheckIcon className="w-5 h-5" />}
+                  >
+                    {isReady ? 'Not Ready' : 'Mark as Ready'}
+                  </Button>
+                </motion.div>
+
+                {isHost && (
+                  <motion.div
+                    whileHover={{ scale: canStart ? 1.02 : 1 }}
+                    whileTap={{ scale: canStart ? 0.98 : 1 }}
+                  >
+                    <Button
+                      onClick={startGame}
+                      disabled={!canStart || gameStarting}
+                      loading={gameStarting}
+                      size="lg"
+                      className="w-full"
+                      icon={<PlayIcon className="w-5 h-5" />}
+                    >
+                      Start Game
+                    </Button>
+                  </motion.div>
+                )}
+
+                <AnimatePresence>
+                  {!canStart && isHost && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="bg-spotify-orange/10 border border-spotify-orange/30 rounded-xl p-3 text-center"
+                    >
+                      <p className="text-sm text-spotify-orange font-medium">
+                        {lobby.members.length < 2 
+                          ? '⚠️ Need at least 2 players to start'
+                          : '⏳ Waiting for all players to be ready'
+                        }
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.6 }}
+                  className="bg-background-tertiary rounded-xl p-4 space-y-2"
+                >
+                  <h4 className="font-medium text-spotify-white mb-2">Game Rules</h4>
+                  <div className="space-y-1 text-sm text-spotify-gray">
+                    <p>• Guess which player likes each {lobby.gameMode === 'SONGS' ? 'song' : 'artist'}</p>
+                    <p>• Each correct guess earns points</p>
+                    <p>• Player with most points wins!</p>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Button
+                    onClick={leaveLobby}
+                    variant="secondary"
+                    size="sm"
+                    className="w-full"
+                    icon={<ArrowLeftIcon className="w-4 h-4" />}
+                  >
+                    Leave Lobby
+                  </Button>
+                </motion.div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   )
 }
